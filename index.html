@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ข่าววันนี้</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div>
+        <p class="date">29 มิถุนายน 2026</p>
+        <h1>ข่าววันนี้</h1>
+        <p class="subtitle">สรุปข่าวสำคัญแบบอ่านง่าย กดเลือกหมวดที่สนใจได้ทันที</p>
+      </div>
+      <label class="search">
+        <span>ค้นหา</span>
+        <input id="searchInput" type="search" placeholder="เช่น หุ้น, ทอง, การเมือง" />
+      </label>
+    </header>
+
+    <main>
+      <nav class="categories" id="categoryBar" aria-label="หมวดข่าว"></nav>
+
+      <section class="hero-news" id="topStory"></section>
+
+      <section class="news-section">
+        <div class="section-title">
+          <h2 id="sectionTitle">ข่าวทั้งหมดวันนี้</h2>
+          <span id="resultCount">0 ข่าว</span>
+        </div>
+        <div class="news-grid" id="newsGrid"></div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
