@@ -103,6 +103,21 @@ LOW_QUALITY_PATTERNS = [
     "appeared first",
 ]
 
+THAI_MONTHS = {
+    "ม.ค.": 1,
+    "ก.พ.": 2,
+    "มี.ค.": 3,
+    "เม.ย.": 4,
+    "พ.ค.": 5,
+    "มิ.ย.": 6,
+    "ก.ค.": 7,
+    "ส.ค.": 8,
+    "ก.ย.": 9,
+    "ต.ค.": 10,
+    "พ.ย.": 11,
+    "ธ.ค.": 12,
+}
+
 
 def env_list(name, default_items):
     value = os.getenv(name, "").strip()
@@ -198,6 +213,7 @@ def clean_fallback_title(value):
 
 def clean_fallback_summary(value, title=""):
     value = strip_publisher_junk(value)
+    value = value.replace("[…]", " ").replace("…", " ")
     value = re.sub(r"\s+", " ", value).strip()
     if not value:
         value = clean_fallback_title(title)
@@ -285,6 +301,19 @@ def page_og_image(url):
 def is_low_quality_story(item):
     text = f"{item.get('title', '')} {item.get('raw_summary', '')}".lower()
     return any(pattern in text for pattern in LOW_QUALITY_PATTERNS)
+
+
+def is_stale_dated_story(item):
+    text = f"{item.get('title', '')} {item.get('raw_summary', '')}"
+    now = datetime.now(timezone(timedelta(hours=7))).date()
+    for day, month_name in re.findall(r"(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)", text):
+        try:
+            story_date = datetime(now.year, THAI_MONTHS[month_name], int(day)).date()
+        except ValueError:
+            continue
+        if abs((now - story_date).days) > 1:
+            return True
+    return False
 
 
 def parse_rss_datetime(value):
@@ -384,7 +413,7 @@ def cluster_news(items):
 
 def pre_ai_story_score(item):
     text = f"{item['title']} {item.get('raw_summary', '')}".lower()
-    if is_low_quality_story(item):
+    if is_low_quality_story(item) or is_stale_dated_story(item):
         return 20
     source_boost = min(item.get("source_count", 1), 5) * 10
     keyword_boost = sum(5 for keyword in TRENDING_KEYWORDS if keyword in text)
@@ -416,7 +445,7 @@ def final_trending_score(item):
 
 def fallback_importance_score(item):
     text = f"{item.get('title', '')} {item.get('raw_summary', '')}"
-    if not contains_thai(text) or is_low_quality_story(item):
+    if not contains_thai(text) or is_low_quality_story(item) or is_stale_dated_story(item):
         return 40
     return min(78, max(55, pre_ai_story_score(item) - 15))
 
