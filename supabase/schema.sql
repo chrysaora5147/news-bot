@@ -1,7 +1,9 @@
 create table if not exists public.articles (
   id text primary key,
   title text not null,
+  title_th text,
   summary text not null,
+  summary_th text,
   category text not null,
   source text,
   url text not null,

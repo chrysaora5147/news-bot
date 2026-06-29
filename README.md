@@ -11,6 +11,7 @@
 - Responsive ใช้ได้ทั้ง desktop และมือถือ
 - GitHub Actions สำหรับดึงข่าวตามเวลา
 - รองรับ RSS, Tavily, SerpAPI, Gemini, Supabase และ LINE Messaging API
+- แปลหัวข้อและสรุปข่าวเป็นภาษาไทยก่อนแสดงบนเว็บและส่ง LINE
 
 ## Categories
 
@@ -60,7 +61,7 @@
 ```text
 GitHub Actions
   -> RSS / Tavily / SerpAPI
-  -> Gemini summary + category
+  -> Gemini Thai translation + summary + category
   -> Supabase articles table
   -> LINE Messaging API
 

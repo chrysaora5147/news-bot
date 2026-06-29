@@ -277,8 +277,11 @@ def gemini_models():
 def summarize_with_gemini(item):
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
+        fallback_text = item.get("raw_summary") or item["title"]
         return {
-            "summary": item.get("raw_summary") or item["title"],
+            "title_th": item["title"],
+            "summary": fallback_text,
+            "summary_th": fallback_text,
             "category": classify_without_ai(item),
             "importance_score": 55,
         }
@@ -289,10 +292,14 @@ def summarize_with_gemini(item):
                 "parts": [
                     {
                         "text": (
-                            "สรุปข่าวนี้เป็นภาษาไทยแบบอ่านง่าย และตอบกลับเป็น JSON เท่านั้น "
-                            "schema: {\"summary\":\"string\",\"category\":\"one category\","
-                            "\"importance_score\":number}. "
+                            "อ่านข่าวนี้แล้วแปล/เขียนให้อยู่ในภาษาไทยธรรมชาติสำหรับคนไทย "
+                            "ตอบกลับเป็น JSON เท่านั้น ห้ามมี markdown หรือคำอธิบายเพิ่ม "
+                            "schema: {\"title_th\":\"string\",\"summary_th\":\"string\","
+                            "\"category\":\"one category\",\"importance_score\":number}. "
+                            "title_th ต้องเป็นหัวข้อข่าวภาษาไทยที่สั้น ชัด และไม่แต่งข้อมูลเพิ่ม "
+                            "summary_th ต้องเป็นสรุปภาษาไทย 1-2 ประโยค อ่านง่าย ไม่เกิน 450 ตัวอักษร "
                             f"category ต้องเป็นหนึ่งใน {DEFAULT_CATEGORIES}. "
+                            "importance_score ให้ 0-100 โดยคัดเฉพาะข่าวสำคัญจริงให้คะแนนสูง "
                             f"หัวข้อ: {item['title']}\n"
                             f"เนื้อหา: {item.get('raw_summary', '')}\n"
                             f"แหล่งข่าว: {item.get('source', '')}"
@@ -311,8 +318,12 @@ def summarize_with_gemini(item):
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             parsed = json.loads(text)
             category = parsed.get("category") if parsed.get("category") in DEFAULT_CATEGORIES else classify_without_ai(item)
+            summary_th = clean_text(parsed.get("summary_th") or parsed.get("summary"))[:600]
+            title_th = clean_text(parsed.get("title_th"))[:220]
             return {
-                "summary": clean_text(parsed.get("summary"))[:600] or item.get("raw_summary") or item["title"],
+                "title_th": title_th or item["title"],
+                "summary": summary_th or item.get("raw_summary") or item["title"],
+                "summary_th": summary_th or item.get("raw_summary") or item["title"],
                 "category": category,
                 "importance_score": int(parsed.get("importance_score") or 55),
             }
@@ -322,8 +333,11 @@ def summarize_with_gemini(item):
                 break
 
     print(f"gemini_all_models_failed title={item['title'][:60]}", file=sys.stderr)
+    fallback_text = item.get("raw_summary") or item["title"]
     return {
-        "summary": item.get("raw_summary") or item["title"],
+        "title_th": item["title"],
+        "summary": fallback_text,
+        "summary_th": fallback_text,
         "category": classify_without_ai(item),
         "importance_score": 50,
     }
@@ -361,7 +375,9 @@ def save_to_supabase(items):
             {
                 "id": item["id"],
                 "title": item["title"],
+                "title_th": item.get("title_th") or item["title"],
                 "summary": item["summary"],
+                "summary_th": item.get("summary_th") or item["summary"],
                 "category": item["category"],
                 "source": item["source"],
                 "url": item["url"],
@@ -396,7 +412,9 @@ def line_message(items):
         return ""
     parts = ["ข่าวเด่นวันนี้"]
     for index, item in enumerate(top_items, start=1):
-        parts.append(f"{index}. {item['title']}\nสรุป: {item['summary']}\nอ่านต่อ: {item['url']}")
+        title = item.get("title_th") or item["title"]
+        summary = item.get("summary_th") or item["summary"]
+        parts.append(f"{index}. {title}\nสรุป: {summary}\nอ่านต่อ: {item['url']}")
     return "\n\n".join(parts)
 
 
