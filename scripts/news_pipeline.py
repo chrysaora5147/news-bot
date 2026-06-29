@@ -27,6 +27,9 @@ DEFAULT_QUERIES = [
     "ข่าวคริปโตวันนี้",
 ]
 
+DEFAULT_SUPABASE_URL = "https://zaqvrwsooxdtkepaaunk.supabase.co"
+DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+
 DEFAULT_CATEGORIES = [
     "ข่าวด่วน",
     "ไทย",
@@ -64,6 +67,23 @@ def env_int(name, default_value):
     except ValueError:
         print(f"invalid_int_env name={name} value={value!r}; using {default_value}", file=sys.stderr)
         return default_value
+
+
+def normalize_supabase_url(value):
+    value = (value or "").strip()
+    if not value:
+        return DEFAULT_SUPABASE_URL
+    if value.startswith("http"):
+        parsed = urllib.parse.urlparse(value)
+        if parsed.netloc.endswith(".supabase.co"):
+            return f"{parsed.scheme}://{parsed.netloc}"
+        match = re.search(r"/project/([a-z0-9]{20})", parsed.path)
+        if match:
+            return f"https://{match.group(1)}.supabase.co"
+        return DEFAULT_SUPABASE_URL
+    if re.fullmatch(r"[a-z0-9]{20}", value):
+        return f"https://{value}.supabase.co"
+    return DEFAULT_SUPABASE_URL
 
 
 def request_json(url, method="GET", payload=None, headers=None, timeout=25):
@@ -245,6 +265,13 @@ def classify_without_ai(item):
     return "ไทย"
 
 
+def gemini_models():
+    configured = os.getenv("GEMINI_MODEL", "").strip()
+    if configured:
+        return [configured] + [model for model in DEFAULT_GEMINI_MODELS if model != configured]
+    return DEFAULT_GEMINI_MODELS
+
+
 def summarize_with_gemini(item):
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -254,8 +281,6 @@ def summarize_with_gemini(item):
             "importance_score": 55,
         }
 
-    model = os.getenv("GEMINI_MODEL", "").strip() or "gemini-1.5-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     prompt = {
         "contents": [
             {
@@ -277,23 +302,27 @@ def summarize_with_gemini(item):
         "generationConfig": {"temperature": 0.2, "response_mime_type": "application/json"},
     }
 
-    try:
-        result = request_json(url, method="POST", payload=prompt)
-        text = result["candidates"][0]["content"]["parts"][0]["text"]
-        parsed = json.loads(text)
-        category = parsed.get("category") if parsed.get("category") in DEFAULT_CATEGORIES else classify_without_ai(item)
-        return {
-            "summary": clean_text(parsed.get("summary"))[:600] or item.get("raw_summary") or item["title"],
-            "category": category,
-            "importance_score": int(parsed.get("importance_score") or 55),
-        }
-    except Exception as exc:
-        print(f"gemini_failed title={item['title'][:60]} error={exc}", file=sys.stderr)
-        return {
-            "summary": item.get("raw_summary") or item["title"],
-            "category": classify_without_ai(item),
-            "importance_score": 50,
-        }
+    for model in gemini_models():
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        try:
+            result = request_json(url, method="POST", payload=prompt)
+            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            parsed = json.loads(text)
+            category = parsed.get("category") if parsed.get("category") in DEFAULT_CATEGORIES else classify_without_ai(item)
+            return {
+                "summary": clean_text(parsed.get("summary"))[:600] or item.get("raw_summary") or item["title"],
+                "category": category,
+                "importance_score": int(parsed.get("importance_score") or 55),
+            }
+        except Exception as exc:
+            print(f"gemini_failed model={model} title={item['title'][:60]} error={exc}", file=sys.stderr)
+
+    print(f"gemini_all_models_failed title={item['title'][:60]}", file=sys.stderr)
+    return {
+        "summary": item.get("raw_summary") or item["title"],
+        "category": classify_without_ai(item),
+        "importance_score": 50,
+    }
 
 
 def collect_news():
@@ -314,7 +343,7 @@ def collect_news():
 
 
 def save_to_supabase(items):
-    supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+    supabase_url = normalize_supabase_url(os.getenv("SUPABASE_URL", ""))
     service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     if not supabase_url or not service_key:
         print("supabase_skipped missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
