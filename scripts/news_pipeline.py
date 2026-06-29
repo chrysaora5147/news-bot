@@ -93,6 +93,16 @@ TRENDING_KEYWORDS = [
     "นักลงทุน",
 ]
 
+LOW_QUALITY_PATTERNS = [
+    "ห้องข่าว",
+    "สุดสัปดาห์",
+    "ดูดวง",
+    "เลขเด็ด",
+    "คลิป",
+    "viral",
+    "appeared first",
+]
+
 
 def env_list(name, default_items):
     value = os.getenv(name, "").strip()
@@ -161,11 +171,41 @@ def clean_text(value):
     return re.sub(r"\s+", " ", value).strip()
 
 
-def clean_fallback_title(value):
+def strip_publisher_junk(value):
     value = clean_text(value)
+    junk_patterns = [
+        r"\bThe post\b.*$",
+        r"\bappeared first\b.*$",
+        r"\bRead more\b.*$",
+        r"\bอ่านต่อ\b.*$",
+        r"\s+ที่มา\s*:.*$",
+        r"\s+\|\s+ห้องข่าว.*$",
+        r"\s+\|\s+ข่าวหุ้นธุรกิจ.*$",
+        r"\s+\|\s+.*ออนไลน์.*$",
+    ]
+    for pattern in junk_patterns:
+        value = re.sub(pattern, "", value, flags=re.IGNORECASE).strip()
+    return value
+
+
+def clean_fallback_title(value):
+    value = strip_publisher_junk(value)
+    value = re.sub(r"^[\"“”]+|[\"“”]+$", "", value).strip()
     value = re.sub(r"\s+\|\s+.*$", "", value)
-    value = re.sub(r"\s+-\s+[A-Za-zก-๙].*$", "", value)
+    value = re.sub(r"\s+-\s+(ข่าวหุ้นธุรกิจ|HoonVision|Thai PBS|The Standard|Bangkok Post|ห้องข่าว).*$", "", value, flags=re.IGNORECASE)
     return value[:180]
+
+
+def clean_fallback_summary(value, title=""):
+    value = strip_publisher_junk(value)
+    value = re.sub(r"\s+", " ", value).strip()
+    if not value:
+        value = clean_fallback_title(title)
+    if value.startswith(title):
+        value = value[len(title):].strip(" -:|")
+    sentences = re.split(r"(?<=[.!?。])\s+|(?<=บาท)\s+|(?<=แล้ว)\s+", value)
+    summary = " ".join(sentence.strip() for sentence in sentences if sentence.strip())[:420]
+    return summary or clean_fallback_title(title)
 
 
 def contains_thai(value):
@@ -211,6 +251,42 @@ def source_key(item):
     return source.lower().replace("www.", "").strip()
 
 
+def item_image_url(item):
+    for element in list(item):
+        tag = element.tag.lower()
+        if tag.endswith("enclosure") and (element.attrib.get("type", "").startswith("image") or element.attrib.get("url")):
+            return clean_text(element.attrib.get("url"))
+        if tag.endswith("content") or tag.endswith("thumbnail"):
+            url = clean_text(element.attrib.get("url"))
+            if url:
+                return url
+    description = item.findtext("description") or ""
+    match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', description, flags=re.IGNORECASE)
+    return clean_text(match.group(1)) if match else ""
+
+
+def page_og_image(url):
+    try:
+        text = request_text(url, timeout=10)[:200000]
+    except Exception:
+        return ""
+    patterns = [
+        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+        r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return urllib.parse.urljoin(url, html.unescape(match.group(1)))
+    return ""
+
+
+def is_low_quality_story(item):
+    text = f"{item.get('title', '')} {item.get('raw_summary', '')}".lower()
+    return any(pattern in text for pattern in LOW_QUALITY_PATTERNS)
+
+
 def parse_rss_datetime(value):
     if not value:
         return datetime.now(timezone.utc).isoformat()
@@ -246,7 +322,8 @@ def extract_rss_items(feed_url):
                     "title": title,
                     "url": link,
                     "source": urllib.parse.urlparse(feed_url).netloc,
-                    "raw_summary": summary[:900],
+                    "raw_summary": clean_fallback_summary(summary, title)[:900],
+                    "image_url": item_image_url(item),
                     "published_at": published_at,
                     "provider": "rss",
                 }
@@ -281,7 +358,7 @@ def cluster_news(items):
         seen_urls = set()
         for row in cluster_items:
             if row["url"] not in seen_urls:
-                urls.append({"title": row["title"], "url": row["url"], "source": row.get("source", "")})
+                urls.append({"title": clean_fallback_title(row["title"]), "url": row["url"], "source": row.get("source", "")})
                 seen_urls.add(row["url"])
 
         merged_summary = " ".join(
@@ -291,8 +368,9 @@ def cluster_news(items):
             **representative,
             "id": story_id_from_title(cluster["title"]),
             "story_id": story_id_from_title(cluster["title"]),
-            "title": representative["title"],
+            "title": clean_fallback_title(representative["title"]),
             "raw_summary": merged_summary or representative.get("raw_summary", ""),
+            "image_url": representative.get("image_url", "") or next((row.get("image_url", "") for row in cluster_items if row.get("image_url")), ""),
             "source": ", ".join(sources[:4]) or representative.get("source", ""),
             "source_count": max(1, len(sources)),
             "source_urls": urls[:8],
@@ -306,6 +384,8 @@ def cluster_news(items):
 
 def pre_ai_story_score(item):
     text = f"{item['title']} {item.get('raw_summary', '')}".lower()
+    if is_low_quality_story(item):
+        return 20
     source_boost = min(item.get("source_count", 1), 5) * 10
     keyword_boost = sum(5 for keyword in TRENDING_KEYWORDS if keyword in text)
     provider_boost = 8 if "+" in item.get("provider", "") else 0
@@ -336,7 +416,7 @@ def final_trending_score(item):
 
 def fallback_importance_score(item):
     text = f"{item.get('title', '')} {item.get('raw_summary', '')}"
-    if not contains_thai(text):
+    if not contains_thai(text) or is_low_quality_story(item):
         return 40
     return min(78, max(55, pre_ai_story_score(item) - 15))
 
@@ -376,7 +456,8 @@ def tavily_search(query):
                 "title": title,
                 "url": url,
                 "source": urllib.parse.urlparse(url).netloc,
-                "raw_summary": clean_text(row.get("content"))[:900],
+                "raw_summary": clean_fallback_summary(row.get("content"), title)[:900],
+                "image_url": "",
                 "published_at": datetime.now(timezone.utc).isoformat(),
                 "provider": "tavily",
             }
@@ -417,7 +498,8 @@ def serpapi_search(query):
                 "title": title,
                 "url": url,
                 "source": clean_text(source.get("name")) or urllib.parse.urlparse(url).netloc,
-                "raw_summary": clean_text(row.get("snippet"))[:900],
+                "raw_summary": clean_fallback_summary(row.get("snippet"), title)[:900],
+                "image_url": clean_text(row.get("thumbnail")),
                 "published_at": datetime.now(timezone.utc).isoformat(),
                 "provider": "serpapi",
             }
@@ -458,7 +540,7 @@ def gemini_models():
 def summarize_with_gemini(item):
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        fallback_text = item.get("raw_summary") or item["title"]
+        fallback_text = clean_fallback_summary(item.get("raw_summary"), item["title"])
         return {
             "title_th": clean_fallback_title(item["title"]),
             "summary": fallback_text,
@@ -517,7 +599,7 @@ def summarize_with_gemini(item):
                 break
 
     print(f"gemini_all_models_failed title={item['title'][:60]}", file=sys.stderr)
-    fallback_text = item.get("raw_summary") or item["title"]
+    fallback_text = clean_fallback_summary(item.get("raw_summary"), item["title"])
     return {
         "title_th": clean_fallback_title(item["title"]),
         "summary": fallback_text,
@@ -568,6 +650,7 @@ def save_to_supabase(items):
                 "source_count": item.get("source_count", 1),
                 "source_urls": item.get("source_urls", []),
                 "url": item["url"],
+                "image_url": item.get("image_url", ""),
                 "provider": item["provider"],
                 "published_at": item["published_at"],
                 "importance_score": item["importance_score"],
@@ -683,6 +766,8 @@ def main():
     limit = env_int("MAX_ARTICLES_PER_RUN", 18)
     enriched = []
     for item in items[:limit]:
+        if not item.get("image_url"):
+            item["image_url"] = page_og_image(item["url"])
         ai = summarize_with_gemini(item)
         row = {**item, **ai}
         row["trending_score"] = final_trending_score(row)

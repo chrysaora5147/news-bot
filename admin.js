@@ -13,7 +13,7 @@ async function loadAdminStories() {
     throw new Error("ยังไม่ได้ตั้งค่า Supabase ใน config.js");
   }
 
-  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title_th,summary_th,category,source,source_count,source_urls,url,importance_score,trending_score,line_candidate,line_sent_at,published_at&importance_score=gte.50&order=trending_score.desc&order=importance_score.desc&limit=30`;
+  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title_th,summary_th,category,source,source_count,source_urls,url,image_url,importance_score,trending_score,line_candidate,line_sent_at,published_at&importance_score=gte.50&order=trending_score.desc&order=importance_score.desc&limit=30`;
   const response = await fetch(endpoint, {
     headers: {
       apikey: config.supabaseAnonKey,

@@ -172,6 +172,26 @@ const fallbackNews = [
   },
 ];
 
+const categoryImages = {
+  ข่าวด่วน: "url('https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=1200&q=80')",
+  ไทย: "url('https://images.unsplash.com/photo-1508009603885-50cf7c579365?auto=format&fit=crop&w=1200&q=80')",
+  การเมือง: "url('https://images.unsplash.com/photo-1529107386315-e1a2ed48a620?auto=format&fit=crop&w=1200&q=80')",
+  เศรษฐกิจ: "url('https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80')",
+  หุ้น: "url('https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=80')",
+  ต่างประเทศ: "url('https://images.unsplash.com/photo-1521295121783-8a321d551ad2?auto=format&fit=crop&w=1200&q=80')",
+  ทองคำ: "url('https://images.unsplash.com/photo-1610375461369-d613b564c245?auto=format&fit=crop&w=1200&q=80')",
+  คริปโต: "url('https://images.unsplash.com/photo-1621761191319-c6fb62004040?auto=format&fit=crop&w=1200&q=80')",
+  เทคโนโลยี: "url('https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80')",
+  ธุรกิจ: "url('https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1200&q=80')",
+  อสังหา: "url('https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=80')",
+  พลังงาน: "url('https://images.unsplash.com/photo-1518709268805-4e9042af2176?auto=format&fit=crop&w=1200&q=80')",
+  กีฬา: "url('https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1200&q=80')",
+  บันเทิง: "url('https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1200&q=80')",
+  สุขภาพ: "url('https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=1200&q=80')",
+  ท่องเที่ยว: "url('https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80')",
+  สิ่งแวดล้อม: "url('https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=1200&q=80')",
+};
+
 let selectedCategory = "ทั้งหมด";
 let searchTerm = "";
 let news = fallbackNews;
@@ -185,13 +205,22 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function cssImage(url) {
+  if (!url) return "";
+  return `url('${String(url).replaceAll("'", "%27")}')`;
+}
+
+function storyImage(row, index) {
+  return cssImage(row.image_url) || categoryImages[row.category] || fallbackNews[index % fallbackNews.length].image;
+}
+
 async function loadSupabaseNews() {
   const config = window.NEWS_CONFIG || {};
   if (!config.supabaseUrl || !config.supabaseAnonKey) {
     return fallbackNews;
   }
 
-  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,title_th,summary,summary_th,category,source,source_count,url,importance_score,trending_score,published_at&importance_score=gte.50&order=trending_score.desc&order=importance_score.desc&order=published_at.desc&limit=60`;
+  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,title_th,summary,summary_th,category,source,source_count,url,image_url,importance_score,trending_score,published_at&importance_score=gte.50&order=trending_score.desc&order=importance_score.desc&order=published_at.desc&limit=60`;
   const response = await fetch(endpoint, {
     headers: {
       apikey: config.supabaseAnonKey,
@@ -215,7 +244,7 @@ async function loadSupabaseNews() {
     score: row.trending_score || row.importance_score || 0,
     summary: row.summary_th || row.summary,
     url: row.url,
-    image: fallbackNews[index % fallbackNews.length].image,
+    image: storyImage(row, index),
     hot: index < 3 || (row.trending_score || row.importance_score) >= 80,
   }));
 }

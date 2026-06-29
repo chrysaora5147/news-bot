@@ -7,6 +7,7 @@ create table if not exists public.articles (
   category text not null,
   source text,
   url text not null,
+  image_url text,
   provider text not null,
   raw_summary text,
   story_id text,
