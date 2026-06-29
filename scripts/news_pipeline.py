@@ -55,6 +55,17 @@ def env_list(name, default_items):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def env_int(name, default_value):
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default_value
+    try:
+        return int(value)
+    except ValueError:
+        print(f"invalid_int_env name={name} value={value!r}; using {default_value}", file=sys.stderr)
+        return default_value
+
+
 def request_json(url, method="GET", payload=None, headers=None, timeout=25):
     data = None
     if payload is not None:
@@ -243,7 +254,7 @@ def summarize_with_gemini(item):
             "importance_score": 55,
         }
 
-    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    model = os.getenv("GEMINI_MODEL", "").strip() or "gemini-1.5-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     prompt = {
         "contents": [
@@ -368,7 +379,7 @@ def push_line(items):
 
 def main():
     items = collect_news()
-    limit = int(os.getenv("MAX_ARTICLES_PER_RUN", "30"))
+    limit = env_int("MAX_ARTICLES_PER_RUN", 30)
     enriched = []
     for item in items[:limit]:
         ai = summarize_with_gemini(item)
