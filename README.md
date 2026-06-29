@@ -56,7 +56,7 @@
 4. ไปที่ Actions > News Pipeline > Run workflow เพื่อทดสอบ
 5. ตั้ง `SEND_LINE_DIGEST=true` ใน GitHub Variables เมื่อต้องการให้ schedule ส่ง LINE อัตโนมัติ
 
-ค่าเริ่มต้นของ pipeline จะประมวลผล `18` story ต่อรอบ เพื่อลดโอกาสชน rate limit ของ Gemini free tier และเว็บจะแสดงเฉพาะข่าวที่มี `importance_score >= 50`
+ค่าเริ่มต้นของ pipeline จะประมวลผล `10` story ต่อรอบ เพื่อลดโอกาสชน rate limit ของ Gemini free tier และเว็บจะแสดงเฉพาะข่าวที่มี `importance_score >= 60` และ `trending_score >= 65`
 GitHub Actions ตั้งเวลาไว้ที่ 07:00, 12:00 และ 18:00 ตามเวลาไทย
 
 ## Architecture

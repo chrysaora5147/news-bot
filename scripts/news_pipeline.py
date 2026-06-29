@@ -14,33 +14,34 @@ from difflib import SequenceMatcher
 
 
 DEFAULT_RSS_FEEDS = [
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "https://feeds.bbci.co.uk/news/business/rss.xml",
+    "https://feeds.bbci.co.uk/news/technology/rss.xml",
+    "https://www.aljazeera.com/xml/rss/all.xml",
+    "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+    "https://www.cnbc.com/id/10001147/device/rss/rss.html",
+    "https://www.cnbc.com/id/19832390/device/rss/rss.html",
+    "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
+    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+    "https://www.ft.com/rss/home",
+    "https://www.scmp.com/rss/91/feed",
+    "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml",
     "https://www.bangkokpost.com/rss/data/topstories.xml",
     "https://www.bangkokpost.com/rss/data/business.xml",
-    "https://www.thairath.co.th/rss/news",
-    "https://www.thairath.co.th/rss/business",
-    "https://www.matichon.co.th/feed",
-    "https://www.khaosod.co.th/feed",
     "https://www.prachachat.net/feed",
-    "https://www.thaipost.net/feed/",
     "https://thestandard.co/feed/",
-    "https://workpointtoday.com/feed/",
     "https://www.infoquest.co.th/feed",
-    "https://www.kaohoon.com/feed",
 ]
 
 DEFAULT_QUERIES = [
-    "ข่าวไทยวันนี้",
-    "ข่าวด่วนวันนี้",
-    "ข่าวการเมืองไทยล่าสุด",
-    "ข่าวเศรษฐกิจไทยวันนี้",
-    "หุ้นไทยวันนี้",
-    "ข่าว SET วันนี้",
-    "ราคาทองวันนี้",
-    "ข่าวคริปโตวันนี้",
-    "ข่าวต่างประเทศวันนี้",
-    "ข่าวธุรกิจไทยวันนี้",
-    "ข่าวพลังงาน น้ำมัน วันนี้",
-    "ข่าวอสังหา วันนี้",
+    "breaking global news today economy markets geopolitics",
+    "Thailand economy politics markets today",
+    "Asia markets China Japan Thailand economy today",
+    "Federal Reserve inflation oil gold markets today",
+    "AI semiconductor technology regulation earnings today",
+    "war geopolitics trade tariffs global economy today",
+    "SET Thailand stocks baht economy today",
+    "gold oil crypto market news today",
 ]
 
 DEFAULT_SUPABASE_URL = "https://zaqvrwsooxdtkepaaunk.supabase.co"
@@ -91,6 +92,21 @@ TRENDING_KEYWORDS = [
     "กนง",
     "ส่งออก",
     "นักลงทุน",
+    "fed",
+    "inflation",
+    "tariff",
+    "trade",
+    "war",
+    "china",
+    "us",
+    "japan",
+    "oil",
+    "gold",
+    "market",
+    "earnings",
+    "ai",
+    "chip",
+    "semiconductor",
 ]
 
 LOW_QUALITY_PATTERNS = [
@@ -101,7 +117,39 @@ LOW_QUALITY_PATTERNS = [
     "คลิป",
     "viral",
     "appeared first",
+    "เปิดเกมรุก",
+    "ทุ่มงบการตลาด",
+    "พรีเซ็นเตอร์",
+    "โปรโมชั่น",
+    "ลดราคา",
+    "ดวง",
+    "หวย",
+    "ซุบซิบ",
 ]
+
+SOURCE_QUALITY = {
+    "bbc.co.uk": 28,
+    "bbc.com": 28,
+    "cnbc.com": 26,
+    "aljazeera.com": 24,
+    "wsj.com": 28,
+    "ft.com": 28,
+    "scmp.com": 22,
+    "channelnewsasia.com": 22,
+    "bangkokpost.com": 18,
+    "infoquest.co.th": 20,
+    "prachachat.net": 16,
+    "thestandard.co": 16,
+    "reuters": 30,
+    "bloomberg": 30,
+    "associated press": 28,
+    "ap news": 28,
+    "nikkei": 24,
+    "financial times": 28,
+    "wall street journal": 28,
+    "bbc": 28,
+    "cnbc": 26,
+}
 
 THAI_MONTHS = {
     "ม.ค.": 1,
@@ -268,6 +316,11 @@ def source_key(item):
     return source.lower().replace("www.", "").strip()
 
 
+def source_quality_score(item):
+    haystack = f"{item.get('source', '')} {urllib.parse.urlparse(item.get('url', '')).netloc}".lower().replace("www.", "")
+    return max((score for key, score in SOURCE_QUALITY.items() if key in haystack), default=6)
+
+
 def item_image_url(item):
     for element in list(item):
         tag = element.tag.lower()
@@ -416,7 +469,8 @@ def pre_ai_story_score(item):
     text = f"{item['title']} {item.get('raw_summary', '')}".lower()
     if is_low_quality_story(item) or is_stale_dated_story(item):
         return 20
-    source_boost = min(item.get("source_count", 1), 5) * 10
+    source_boost = min(item.get("source_count", 1), 5) * 8
+    quality_boost = source_quality_score(item)
     keyword_boost = sum(5 for keyword in TRENDING_KEYWORDS if keyword in text)
     provider_boost = 8 if "+" in item.get("provider", "") else 0
     freshness_boost = 0
@@ -426,12 +480,13 @@ def pre_ai_story_score(item):
         freshness_boost = max(0, 24 - int(age_hours))
     except Exception:
         freshness_boost = 8
-    return 35 + source_boost + keyword_boost + provider_boost + freshness_boost
+    return 22 + quality_boost + source_boost + keyword_boost + provider_boost + freshness_boost
 
 
 def final_trending_score(item):
     base = int(item.get("importance_score", 50))
     source_boost = min(item.get("source_count", 1), 5) * 6
+    quality_boost = int(source_quality_score(item) * 0.7)
     keyword_boost = min(12, sum(3 for keyword in TRENDING_KEYWORDS if keyword in f"{item['title']} {item.get('summary_th', '')}".lower()))
     freshness_boost = 0
     try:
@@ -441,14 +496,20 @@ def final_trending_score(item):
     except Exception:
         freshness_boost = 5
     provider_boost = 4 if "+" in item.get("provider", "") else 0
-    return min(100, int(base * 0.78) + source_boost + keyword_boost + freshness_boost + provider_boost)
+    return min(100, int(base * 0.72) + quality_boost + source_boost + keyword_boost + freshness_boost + provider_boost)
 
 
 def fallback_importance_score(item):
     text = f"{item.get('title', '')} {item.get('raw_summary', '')}"
     if not contains_thai(text) or is_low_quality_story(item) or is_stale_dated_story(item):
         return 40
-    return min(78, max(55, pre_ai_story_score(item) - 15))
+    return min(78, max(55, pre_ai_story_score(item) - 18))
+
+
+def google_news_rss_search(query):
+    encoded = urllib.parse.quote_plus(query)
+    url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+    return [{**item, "provider": "google_news"} for item in extract_rss_items(url)[:12]]
 
 
 def tavily_search(query):
@@ -586,16 +647,20 @@ def summarize_with_gemini(item):
                     {
                         "text": (
                             "อ่านข่าวนี้แล้วแปล/เขียนให้อยู่ในภาษาไทยธรรมชาติสำหรับคนไทย "
+                            "แม้ต้นฉบับเป็นภาษาอังกฤษหรือภาษาอื่น ให้สรุปออกมาเป็นภาษาไทยทั้งหมด "
                             "ตอบกลับเป็น JSON เท่านั้น ห้ามมี markdown หรือคำอธิบายเพิ่ม "
                             "schema: {\"title_th\":\"string\",\"summary_th\":\"string\","
                             "\"category\":\"one category\",\"importance_score\":number}. "
-                            "title_th ต้องเป็นหัวข้อข่าวภาษาไทยที่สั้น ชัด และไม่แต่งข้อมูลเพิ่ม "
-                            "summary_th ต้องเป็นสรุปภาษาไทย 1-2 ประโยค อ่านง่าย ไม่เกิน 450 ตัวอักษร "
+                            "title_th ต้องเป็นหัวข้อข่าวภาษาไทยที่บอกสาระสำคัญ ไม่ใช่หัวข้อ SEO หรือชื่อรายการ "
+                            "summary_th ต้องเป็นสรุปภาษาไทย 1-2 ประโยค บอกว่าเกิดอะไรขึ้น ทำไมสำคัญ และกระทบใคร ไม่เกิน 450 ตัวอักษร "
                             f"category ต้องเป็นหนึ่งใน {DEFAULT_CATEGORIES}. "
-                            "importance_score ให้ 0-100 โดยคัดเฉพาะข่าวสำคัญจริงให้คะแนนสูง "
+                            "importance_score ให้ 0-100 เฉพาะข่าวที่มีผลต่อเศรษฐกิจ ตลาด การเมือง เทคโนโลยี ภูมิรัฐศาสตร์ "
+                            "หรือเป็นเหตุการณ์ใหญ่ระดับประเทศ/โลกเท่านั้นจึงควรเกิน 70 "
+                            "ข่าว advertorial, โปรโมชัน, ไวรัล, รายการวิดีโอ, gossip หรือเรื่องเล็กมากให้ต่ำกว่า 50 "
                             f"หัวข้อ: {item['title']}\n"
                             f"เนื้อหา: {item.get('raw_summary', '')}\n"
-                            f"แหล่งข่าว: {item.get('source', '')}"
+                            f"แหล่งข่าว: {item.get('source', '')}\n"
+                            f"จำนวนแหล่งข่าวใน story: {item.get('source_count', 1)}"
                         )
                     }
                 ]
@@ -616,6 +681,8 @@ def summarize_with_gemini(item):
             importance_score = int(parsed.get("importance_score") or 55)
             if not contains_thai(summary_th):
                 importance_score = min(importance_score, 40)
+            if is_low_quality_story({**item, "summary_th": summary_th}) or is_stale_dated_story(item):
+                importance_score = min(importance_score, 45)
             return {
                 "title_th": title_th or item["title"],
                 "summary": summary_th or item.get("raw_summary") or item["title"],
@@ -625,8 +692,6 @@ def summarize_with_gemini(item):
             }
         except Exception as exc:
             print(f"gemini_failed model={model} title={item['title'][:60]} error={exc}", file=sys.stderr)
-            if is_rate_limited(exc):
-                break
 
     print(f"gemini_all_models_failed title={item['title'][:60]}", file=sys.stderr)
     fallback_text = clean_fallback_summary(item.get("raw_summary"), item["title"])
@@ -646,6 +711,7 @@ def collect_news():
         time.sleep(0.2)
 
     for query in env_list("NEWS_SEARCH_QUERIES", DEFAULT_QUERIES):
+        items.extend(google_news_rss_search(query))
         items.extend(tavily_search(query))
         items.extend(serpapi_search(query))
         time.sleep(0.2)
@@ -665,7 +731,7 @@ def save_to_supabase(items):
 
     rows = []
     for item in items:
-        if item["importance_score"] < 50:
+        if item["importance_score"] < 60 or item.get("trending_score", 0) < 65:
             continue
         rows.append(
             {
@@ -793,7 +859,7 @@ def push_line(items):
 
 def main():
     items = collect_news()
-    limit = env_int("MAX_ARTICLES_PER_RUN", 18)
+    limit = env_int("MAX_ARTICLES_PER_RUN", 10)
     enriched = []
     for item in items[:limit]:
         if not item.get("image_url"):

@@ -220,7 +220,7 @@ async function loadSupabaseNews() {
     return fallbackNews;
   }
 
-  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,title_th,summary,summary_th,category,source,source_count,url,image_url,importance_score,trending_score,published_at&importance_score=gte.50&order=trending_score.desc&order=importance_score.desc&order=published_at.desc&limit=60`;
+  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,title_th,summary,summary_th,category,source,source_count,url,image_url,importance_score,trending_score,published_at&importance_score=gte.60&trending_score=gte.65&order=trending_score.desc&order=importance_score.desc&order=published_at.desc&limit=60`;
   const response = await fetch(endpoint, {
     headers: {
       apikey: config.supabaseAnonKey,
