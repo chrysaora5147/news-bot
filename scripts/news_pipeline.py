@@ -183,6 +183,7 @@ def clean_xml_text(value):
 def clean_text(value):
     value = re.sub(r"<[^>]+>", " ", value or "")
     value = html.unescape(value)
+    value = value.replace('\\"', '"').replace("\\'", "'").replace("\\", "")
     return re.sub(r"\s+", " ", value).strip()
 
 
