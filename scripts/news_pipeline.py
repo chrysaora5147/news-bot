@@ -161,6 +161,13 @@ def clean_text(value):
     return re.sub(r"\s+", " ", value).strip()
 
 
+def clean_fallback_title(value):
+    value = clean_text(value)
+    value = re.sub(r"\s+\|\s+.*$", "", value)
+    value = re.sub(r"\s+-\s+[A-Za-zก-๙].*$", "", value)
+    return value[:180]
+
+
 def contains_thai(value):
     return any("\u0e00" <= char <= "\u0e7f" for char in value or "")
 
@@ -314,16 +321,17 @@ def pre_ai_story_score(item):
 
 def final_trending_score(item):
     base = int(item.get("importance_score", 50))
-    source_boost = min(item.get("source_count", 1), 5) * 7
-    keyword_boost = sum(3 for keyword in TRENDING_KEYWORDS if keyword in f"{item['title']} {item.get('summary_th', '')}".lower())
+    source_boost = min(item.get("source_count", 1), 5) * 6
+    keyword_boost = min(12, sum(3 for keyword in TRENDING_KEYWORDS if keyword in f"{item['title']} {item.get('summary_th', '')}".lower()))
     freshness_boost = 0
     try:
         published = datetime.fromisoformat(item["published_at"].replace("Z", "+00:00"))
         age_hours = max(0, (datetime.now(timezone.utc) - published).total_seconds() / 3600)
-        freshness_boost = max(0, 18 - int(age_hours))
+        freshness_boost = max(0, 12 - int(age_hours))
     except Exception:
         freshness_boost = 5
-    return min(100, base + source_boost + keyword_boost + freshness_boost)
+    provider_boost = 4 if "+" in item.get("provider", "") else 0
+    return min(100, int(base * 0.78) + source_boost + keyword_boost + freshness_boost + provider_boost)
 
 
 def fallback_importance_score(item):
@@ -452,7 +460,7 @@ def summarize_with_gemini(item):
     if not api_key:
         fallback_text = item.get("raw_summary") or item["title"]
         return {
-            "title_th": item["title"],
+            "title_th": clean_fallback_title(item["title"]),
             "summary": fallback_text,
             "summary_th": fallback_text,
             "category": classify_without_ai(item),
@@ -511,7 +519,7 @@ def summarize_with_gemini(item):
     print(f"gemini_all_models_failed title={item['title'][:60]}", file=sys.stderr)
     fallback_text = item.get("raw_summary") or item["title"]
     return {
-        "title_th": item["title"],
+        "title_th": clean_fallback_title(item["title"]),
         "summary": fallback_text,
         "summary_th": fallback_text,
         "category": classify_without_ai(item),
