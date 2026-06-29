@@ -121,6 +121,11 @@ LOW_QUALITY_PATTERNS = [
     "morning bid",
     "newsletter",
     "live updates",
+    "fifa55",
+    "เว็บไซต์ทางการ",
+    "official website",
+    "ibd digital",
+    "2 months for",
     "appeared first",
     "เปิดเกมรุก",
     "ทุ่มงบการตลาด",
@@ -130,6 +135,12 @@ LOW_QUALITY_PATTERNS = [
     "ดวง",
     "หวย",
     "ซุบซิบ",
+]
+
+BAD_SOURCE_PATTERNS = [
+    "fifa55",
+    "equiti",
+    "investors.com",
 ]
 
 SOURCE_QUALITY = {
@@ -321,6 +332,25 @@ def source_key(item):
     return source.lower().replace("www.", "").strip()
 
 
+def is_foreign_source(item):
+    source = source_key(item)
+    return any(
+        key in source
+        for key in [
+            "bbc",
+            "cnbc",
+            "aljazeera",
+            "wsj",
+            "ft",
+            "scmp",
+            "channelnewsasia",
+            "reuters",
+            "bloomberg",
+            "forbes",
+        ]
+    )
+
+
 def source_quality_score(item):
     haystack = f"{item.get('source', '')} {urllib.parse.urlparse(item.get('url', '')).netloc}".lower().replace("www.", "")
     return max((score for key, score in SOURCE_QUALITY.items() if key in haystack), default=6)
@@ -358,8 +388,8 @@ def page_og_image(url):
 
 
 def is_low_quality_story(item):
-    text = f"{item.get('title', '')} {item.get('raw_summary', '')}".lower()
-    return any(pattern in text for pattern in LOW_QUALITY_PATTERNS)
+    text = f"{item.get('title', '')} {item.get('raw_summary', '')} {item.get('source', '')} {item.get('url', '')}".lower()
+    return any(pattern in text for pattern in LOW_QUALITY_PATTERNS + BAD_SOURCE_PATTERNS)
 
 
 def is_stale_dated_story(item):
@@ -402,6 +432,7 @@ def extract_rss_items(feed_url):
         title = clean_text(item.findtext("title"))
         link = clean_text(item.findtext("link"))
         summary = clean_text(item.findtext("description"))
+        source_name = clean_text(item.findtext("source")) or urllib.parse.urlparse(feed_url).netloc
         published_at = parse_rss_datetime(item.findtext("pubDate"))
         if title and link:
             items.append(
@@ -409,7 +440,7 @@ def extract_rss_items(feed_url):
                     "id": stable_id(link, title),
                     "title": title,
                     "url": link,
-                    "source": urllib.parse.urlparse(feed_url).netloc,
+                    "source": source_name,
                     "raw_summary": clean_fallback_summary(summary, title)[:900],
                     "image_url": item_image_url(item),
                     "published_at": published_at,
@@ -663,7 +694,7 @@ def classify_without_ai(item):
     for category, keywords in rules:
         if any(keyword in text for keyword in keywords):
             return category
-    return "ไทย"
+    return "ต่างประเทศ" if is_foreign_source(item) else "ไทย"
 
 
 def gemini_models():
