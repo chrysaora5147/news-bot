@@ -387,7 +387,11 @@ def save_to_supabase(items):
 
 
 def line_message(items):
-    top_items = sorted(items, key=lambda row: row.get("importance_score", 0), reverse=True)[:3]
+    top_items = sorted(
+        [item for item in items if item.get("importance_score", 0) >= 50],
+        key=lambda row: row.get("importance_score", 0),
+        reverse=True,
+    )[:3]
     if not top_items:
         return ""
     parts = ["ข่าวเด่นวันนี้"]
