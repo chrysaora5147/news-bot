@@ -1,0 +1,40 @@
+name: News Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      send_line:
+        description: "Send LINE digest after collecting news"
+        required: false
+        default: "false"
+  schedule:
+    - cron: "0 0,12 * * *"
+
+jobs:
+  collect-news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run news pipeline
+        env:
+          RSS_FEEDS: ${{ vars.RSS_FEEDS }}
+          NEWS_SEARCH_QUERIES: ${{ vars.NEWS_SEARCH_QUERIES }}
+          MAX_ARTICLES_PER_RUN: ${{ vars.MAX_ARTICLES_PER_RUN }}
+          SEND_LINE_DIGEST: ${{ github.event.inputs.send_line || vars.SEND_LINE_DIGEST || 'false' }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO_IDS: ${{ secrets.LINE_TO_IDS }}
+        run: python scripts/news_pipeline.py

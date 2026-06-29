@@ -19,7 +19,7 @@ const categories = [
   "สิ่งแวดล้อม",
 ];
 
-const news = [
+const fallbackNews = [
   {
     title: "ครม. ผ่านมาตรการลดค่าครองชีพรอบใหม่",
     category: "เศรษฐกิจ",
@@ -174,6 +174,40 @@ const news = [
 
 let selectedCategory = "ทั้งหมด";
 let searchTerm = "";
+let news = fallbackNews;
+
+async function loadSupabaseNews() {
+  const config = window.NEWS_CONFIG || {};
+  if (!config.supabaseUrl || !config.supabaseAnonKey) {
+    return fallbackNews;
+  }
+
+  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,summary,category,source,url,importance_score,published_at&order=published_at.desc&limit=60`;
+  const response = await fetch(endpoint, {
+    headers: {
+      apikey: config.supabaseAnonKey,
+      Authorization: `Bearer ${config.supabaseAnonKey}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Supabase request failed: ${response.status}`);
+  }
+
+  const rows = await response.json();
+  return rows.map((row, index) => ({
+    title: row.title,
+    category: row.category,
+    time: new Date(row.published_at).toLocaleTimeString("th-TH", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    sourceCount: row.source ? 1 : 0,
+    summary: row.summary,
+    image: fallbackNews[index % fallbackNews.length].image,
+    hot: index < 3 || row.importance_score >= 80,
+  }));
+}
 
 function filteredNews() {
   return news.filter((item) => {
@@ -272,4 +306,13 @@ document.querySelector("#searchInput").addEventListener("input", (event) => {
   render();
 });
 
-render();
+loadSupabaseNews()
+  .then((items) => {
+    news = items.length ? items : fallbackNews;
+    render();
+  })
+  .catch((error) => {
+    console.warn(error);
+    news = fallbackNews;
+    render();
+  });
