@@ -8,7 +8,8 @@ on:
         required: false
         default: "false"
   schedule:
-    - cron: "0 0,12 * * *"
+    # 07:00, 12:00, 18:00 Asia/Bangkok
+    - cron: "0 0,5,11 * * *"
 
 jobs:
   collect-news:

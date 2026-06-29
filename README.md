@@ -12,6 +12,8 @@
 - GitHub Actions สำหรับดึงข่าวตามเวลา
 - รองรับ RSS, Tavily, SerpAPI, Gemini, Supabase และ LINE Messaging API
 - แปลหัวข้อและสรุปข่าวเป็นภาษาไทยก่อนแสดงบนเว็บและส่ง LINE
+- รวมข่าวซ้ำเป็น story เดียว พร้อมนับจำนวนแหล่งข่าวและคะแนนความดัง
+- หน้า admin preview ที่ `admin.html` สำหรับดูข่าวที่จะส่ง LINE ก่อนเปิดส่งจริง
 
 ## Categories
 
@@ -54,13 +56,15 @@
 4. ไปที่ Actions > News Pipeline > Run workflow เพื่อทดสอบ
 5. ตั้ง `SEND_LINE_DIGEST=true` ใน GitHub Variables เมื่อต้องการให้ schedule ส่ง LINE อัตโนมัติ
 
-ค่าเริ่มต้นของ pipeline จะประมวลผล `12` ข่าวต่อรอบ เพื่อลดโอกาสชน rate limit ของ Gemini free tier และเว็บจะแสดงเฉพาะข่าวที่มี `importance_score >= 50`
+ค่าเริ่มต้นของ pipeline จะประมวลผล `18` story ต่อรอบ เพื่อลดโอกาสชน rate limit ของ Gemini free tier และเว็บจะแสดงเฉพาะข่าวที่มี `importance_score >= 50`
+GitHub Actions ตั้งเวลาไว้ที่ 07:00, 12:00 และ 18:00 ตามเวลาไทย
 
 ## Architecture
 
 ```text
 GitHub Actions
   -> RSS / Tavily / SerpAPI
+  -> story clustering + trending score
   -> Gemini Thai translation + summary + category
   -> Supabase articles table
   -> LINE Messaging API

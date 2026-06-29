@@ -176,13 +176,22 @@ let selectedCategory = "ทั้งหมด";
 let searchTerm = "";
 let news = fallbackNews;
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 async function loadSupabaseNews() {
   const config = window.NEWS_CONFIG || {};
   if (!config.supabaseUrl || !config.supabaseAnonKey) {
     return fallbackNews;
   }
 
-  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,title_th,summary,summary_th,category,source,url,importance_score,published_at&importance_score=gte.50&order=importance_score.desc&order=published_at.desc&limit=60`;
+  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,title_th,summary,summary_th,category,source,source_count,url,importance_score,trending_score,published_at&importance_score=gte.50&order=trending_score.desc&order=importance_score.desc&order=published_at.desc&limit=60`;
   const response = await fetch(endpoint, {
     headers: {
       apikey: config.supabaseAnonKey,
@@ -202,10 +211,12 @@ async function loadSupabaseNews() {
       hour: "2-digit",
       minute: "2-digit",
     }),
-    sourceCount: row.source ? 1 : 0,
+    sourceCount: row.source_count || (row.source ? 1 : 0),
+    score: row.trending_score || row.importance_score || 0,
     summary: row.summary_th || row.summary,
+    url: row.url,
     image: fallbackNews[index % fallbackNews.length].image,
-    hot: index < 3 || row.importance_score >= 80,
+    hot: index < 3 || (row.trending_score || row.importance_score) >= 80,
   }));
 }
 
@@ -227,7 +238,7 @@ function renderCategories() {
   bar.innerHTML = categories
     .map(
       (category) =>
-        `<button class="category-button ${category === selectedCategory ? "active" : ""}" data-category="${category}">${category}</button>`
+        `<button class="category-button ${category === selectedCategory ? "active" : ""}" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`
     )
     .join("");
 
@@ -251,13 +262,14 @@ function renderTopStory(items) {
   container.innerHTML = `
     <article class="top-card" style="--image: ${story.image}">
       <div>
-        <span class="pill">${story.category}</span>
-        <h2>${story.title}</h2>
-        <p>${story.summary}</p>
+        <span class="pill">${escapeHtml(story.category)}</span>
+        <h2>${escapeHtml(story.title)}</h2>
+        <p>${escapeHtml(story.summary)}</p>
       </div>
       <div class="top-meta">
-        <span class="pill">${story.time}</span>
+        <span class="pill">${escapeHtml(story.time)}</span>
         <span class="pill">${story.sourceCount} แหล่งข่าว</span>
+        <span class="pill">${story.score || 0}/100</span>
       </div>
     </article>
   `;
@@ -278,11 +290,16 @@ function renderNewsGrid(items) {
           <div class="thumb" style="--image: ${item.image}"></div>
           <div class="news-body">
             <div class="card-meta">
-              <span>${item.category}</span>
-              <span>${item.time}</span>
+              <span>${escapeHtml(item.category)}</span>
+              <span>${escapeHtml(item.time)}</span>
             </div>
-            <h3>${item.title}</h3>
-            <p>${item.summary}</p>
+            <h3>${escapeHtml(item.title)}</h3>
+            <p>${escapeHtml(item.summary)}</p>
+            <div class="story-meta">
+              <span>${item.sourceCount} แหล่งข่าว</span>
+              <span>${item.score || 0}/100</span>
+              ${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer">อ่านต่อ</a>` : ""}
+            </div>
           </div>
         </article>
       `
@@ -304,6 +321,12 @@ function render() {
 document.querySelector("#searchInput").addEventListener("input", (event) => {
   searchTerm = event.target.value;
   render();
+});
+
+document.querySelector("#dateLabel").textContent = new Date().toLocaleDateString("th-TH", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
 });
 
 loadSupabaseNews()

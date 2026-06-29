@@ -9,20 +9,38 @@ import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher
 
 
 DEFAULT_RSS_FEEDS = [
     "https://www.bangkokpost.com/rss/data/topstories.xml",
+    "https://www.bangkokpost.com/rss/data/business.xml",
+    "https://www.thairath.co.th/rss/news",
+    "https://www.thairath.co.th/rss/business",
+    "https://www.matichon.co.th/feed",
+    "https://www.khaosod.co.th/feed",
+    "https://www.prachachat.net/feed",
+    "https://www.thaipost.net/feed/",
+    "https://thestandard.co/feed/",
+    "https://workpointtoday.com/feed/",
+    "https://www.infoquest.co.th/feed",
+    "https://www.kaohoon.com/feed",
 ]
 
 DEFAULT_QUERIES = [
     "ข่าวไทยวันนี้",
+    "ข่าวด่วนวันนี้",
+    "ข่าวการเมืองไทยล่าสุด",
     "ข่าวเศรษฐกิจไทยวันนี้",
     "หุ้นไทยวันนี้",
+    "ข่าว SET วันนี้",
     "ราคาทองวันนี้",
-    "ข่าวการเมืองไทยวันนี้",
+    "ข่าวคริปโตวันนี้",
+    "ข่าวต่างประเทศวันนี้",
     "ข่าวธุรกิจไทยวันนี้",
+    "ข่าวพลังงาน น้ำมัน วันนี้",
+    "ข่าวอสังหา วันนี้",
 ]
 
 DEFAULT_SUPABASE_URL = "https://zaqvrwsooxdtkepaaunk.supabase.co"
@@ -46,6 +64,33 @@ DEFAULT_CATEGORIES = [
     "สุขภาพ",
     "ท่องเที่ยว",
     "สิ่งแวดล้อม",
+]
+
+TRENDING_KEYWORDS = [
+    "ด่วน",
+    "ล่าสุด",
+    "ครม",
+    "รัฐบาล",
+    "นายก",
+    "สภา",
+    "งบประมาณ",
+    "เศรษฐกิจ",
+    "เงินเฟ้อ",
+    "ดอกเบี้ย",
+    "บาท",
+    "หุ้น",
+    "set",
+    "ตลาดหลักทรัพย์",
+    "ทอง",
+    "น้ำมัน",
+    "พลังงาน",
+    "สงคราม",
+    "เลือกตั้ง",
+    "ภาษี",
+    "ธปท",
+    "กนง",
+    "ส่งออก",
+    "นักลงทุน",
 ]
 
 
@@ -106,6 +151,10 @@ def request_text(url, timeout=25):
         return response.read().decode("utf-8", errors="replace")
 
 
+def clean_xml_text(value):
+    return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", value or "")
+
+
 def clean_text(value):
     value = re.sub(r"<[^>]+>", " ", value or "")
     value = html.unescape(value)
@@ -119,6 +168,40 @@ def contains_thai(value):
 def stable_id(url, title):
     key = (url or title).strip().lower()
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def story_id_from_title(title):
+    normalized = normalize_story_text(title)
+    return "story_" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
+
+
+def normalize_story_text(value):
+    value = clean_text(value).lower()
+    value = re.sub(r"https?://\S+", " ", value)
+    value = re.sub(r"[-|:–—].*$", " ", value)
+    value = re.sub(r"[^\w\u0e00-\u0e7f]+", " ", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value
+
+
+def story_similarity(left, right):
+    left_norm = normalize_story_text(left)
+    right_norm = normalize_story_text(right)
+    if not left_norm or not right_norm:
+        return 0
+
+    sequence_score = SequenceMatcher(None, left_norm, right_norm).ratio()
+    left_tokens = {token for token in left_norm.split() if len(token) > 2}
+    right_tokens = {token for token in right_norm.split() if len(token) > 2}
+    token_score = 0
+    if left_tokens and right_tokens:
+        token_score = len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+    return max(sequence_score, token_score)
+
+
+def source_key(item):
+    source = item.get("source") or urllib.parse.urlparse(item.get("url", "")).netloc
+    return source.lower().replace("www.", "").strip()
 
 
 def parse_rss_datetime(value):
@@ -137,14 +220,14 @@ def parse_rss_datetime(value):
 
 def extract_rss_items(feed_url):
     try:
-        xml_text = request_text(feed_url)
+        xml_text = clean_xml_text(request_text(feed_url))
         root = ET.fromstring(xml_text)
     except Exception as exc:
         print(f"rss_failed url={feed_url} error={exc}", file=sys.stderr)
         return []
 
     items = []
-    for item in root.findall(".//item")[:20]:
+    for item in root.findall(".//item")[:30]:
         title = clean_text(item.findtext("title"))
         link = clean_text(item.findtext("link"))
         summary = clean_text(item.findtext("description"))
@@ -162,6 +245,85 @@ def extract_rss_items(feed_url):
                 }
             )
     return items
+
+
+def cluster_news(items):
+    sorted_items = sorted(items, key=lambda item: item.get("published_at", ""), reverse=True)
+    clusters = []
+    for item in sorted_items:
+        matched = None
+        for cluster in clusters:
+            if story_similarity(item["title"], cluster["title"]) >= 0.62:
+                matched = cluster
+                break
+        if matched:
+            matched["items"].append(item)
+            matched["title"] = max([row["title"] for row in matched["items"]], key=len)
+        else:
+            clusters.append({"title": item["title"], "items": [item]})
+
+    stories = []
+    for cluster in clusters:
+        cluster_items = cluster["items"]
+        representative = max(
+            cluster_items,
+            key=lambda row: (len(row.get("raw_summary", "")), row.get("published_at", "")),
+        )
+        sources = sorted({source_key(row) for row in cluster_items if source_key(row)})
+        urls = []
+        seen_urls = set()
+        for row in cluster_items:
+            if row["url"] not in seen_urls:
+                urls.append({"title": row["title"], "url": row["url"], "source": row.get("source", "")})
+                seen_urls.add(row["url"])
+
+        merged_summary = " ".join(
+            clean_text(row.get("raw_summary") or row["title"]) for row in cluster_items[:5]
+        )[:1800]
+        story = {
+            **representative,
+            "id": story_id_from_title(cluster["title"]),
+            "story_id": story_id_from_title(cluster["title"]),
+            "title": representative["title"],
+            "raw_summary": merged_summary or representative.get("raw_summary", ""),
+            "source": ", ".join(sources[:4]) or representative.get("source", ""),
+            "source_count": max(1, len(sources)),
+            "source_urls": urls[:8],
+            "provider": "+".join(sorted({row.get("provider", "unknown") for row in cluster_items}))[:80],
+            "published_at": max(row.get("published_at", representative["published_at"]) for row in cluster_items),
+        }
+        stories.append(story)
+
+    return sorted(stories, key=pre_ai_story_score, reverse=True)
+
+
+def pre_ai_story_score(item):
+    text = f"{item['title']} {item.get('raw_summary', '')}".lower()
+    source_boost = min(item.get("source_count", 1), 5) * 10
+    keyword_boost = sum(5 for keyword in TRENDING_KEYWORDS if keyword in text)
+    provider_boost = 8 if "+" in item.get("provider", "") else 0
+    freshness_boost = 0
+    try:
+        published = datetime.fromisoformat(item["published_at"].replace("Z", "+00:00"))
+        age_hours = max(0, (datetime.now(timezone.utc) - published).total_seconds() / 3600)
+        freshness_boost = max(0, 24 - int(age_hours))
+    except Exception:
+        freshness_boost = 8
+    return 35 + source_boost + keyword_boost + provider_boost + freshness_boost
+
+
+def final_trending_score(item):
+    base = int(item.get("importance_score", 50))
+    source_boost = min(item.get("source_count", 1), 5) * 7
+    keyword_boost = sum(3 for keyword in TRENDING_KEYWORDS if keyword in f"{item['title']} {item.get('summary_th', '')}".lower())
+    freshness_boost = 0
+    try:
+        published = datetime.fromisoformat(item["published_at"].replace("Z", "+00:00"))
+        age_hours = max(0, (datetime.now(timezone.utc) - published).total_seconds() / 3600)
+        freshness_boost = max(0, 18 - int(age_hours))
+    except Exception:
+        freshness_boost = 5
+    return min(100, base + source_boost + keyword_boost + freshness_boost)
 
 
 def tavily_search(query):
@@ -364,7 +526,7 @@ def collect_news():
     deduped = {}
     for item in items:
         deduped[item["id"]] = item
-    return list(deduped.values())
+    return cluster_news(list(deduped.values()))
 
 
 def save_to_supabase(items):
@@ -381,16 +543,21 @@ def save_to_supabase(items):
         rows.append(
             {
                 "id": item["id"],
+                "story_id": item.get("story_id") or item["id"],
                 "title": item["title"],
                 "title_th": item.get("title_th") or item["title"],
                 "summary": item["summary"],
                 "summary_th": item.get("summary_th") or item["summary"],
                 "category": item["category"],
                 "source": item["source"],
+                "source_count": item.get("source_count", 1),
+                "source_urls": item.get("source_urls", []),
                 "url": item["url"],
                 "provider": item["provider"],
                 "published_at": item["published_at"],
                 "importance_score": item["importance_score"],
+                "trending_score": item.get("trending_score", item["importance_score"]),
+                "line_candidate": item.get("line_candidate", False),
                 "raw_summary": item.get("raw_summary", ""),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -409,20 +576,71 @@ def save_to_supabase(items):
     print(f"supabase_saved rows={len(rows)}")
 
 
+def get_line_sent_ids(items):
+    supabase_url = normalize_supabase_url(os.getenv("SUPABASE_URL", ""))
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    ids = [item["id"] for item in items if item.get("id")]
+    if not supabase_url or not service_key or not ids:
+        return set()
+
+    safe_ids = ",".join(ids[:50])
+    endpoint = f"{supabase_url}/rest/v1/articles?select=id,line_sent_at&id=in.({safe_ids})"
+    headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+    try:
+        rows = request_json(endpoint, headers=headers)
+    except Exception as exc:
+        print(f"line_sent_lookup_failed error={exc}", file=sys.stderr)
+        return set()
+    return {row["id"] for row in rows if row.get("line_sent_at")}
+
+
+def mark_line_sent(items):
+    supabase_url = normalize_supabase_url(os.getenv("SUPABASE_URL", ""))
+    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    ids = [item["id"] for item in items if item.get("id")]
+    if not supabase_url or not service_key or not ids:
+        return
+
+    safe_ids = ",".join(ids[:50])
+    endpoint = f"{supabase_url}/rest/v1/articles?id=in.({safe_ids})"
+    headers = {
+        "apikey": service_key,
+        "Authorization": f"Bearer {service_key}",
+        "Prefer": "return=minimal",
+    }
+    request_json(
+        endpoint,
+        method="PATCH",
+        payload={"line_sent_at": datetime.now(timezone.utc).isoformat()},
+        headers=headers,
+    )
+
+
 def line_message(items):
+    sent_ids = get_line_sent_ids(items)
     top_items = sorted(
-        [item for item in items if item.get("importance_score", 0) >= 50],
-        key=lambda row: row.get("importance_score", 0),
+        [
+            item
+            for item in items
+            if item.get("line_candidate") and item.get("id") not in sent_ids
+        ],
+        key=lambda row: (row.get("trending_score", 0), row.get("importance_score", 0), row.get("source_count", 1)),
         reverse=True,
     )[:3]
     if not top_items:
-        return ""
+        return "", []
     parts = ["ข่าวเด่นวันนี้"]
     for index, item in enumerate(top_items, start=1):
         title = item.get("title_th") or item["title"]
         summary = item.get("summary_th") or item["summary"]
-        parts.append(f"{index}. {title}\nสรุป: {summary}\nอ่านต่อ: {item['url']}")
-    return "\n\n".join(parts)
+        source_count = item.get("source_count", 1)
+        parts.append(
+            f"{index}. {title}\n"
+            f"สรุป: {summary}\n"
+            f"ความดัง: {item.get('trending_score', item.get('importance_score', 0))}/100 | {source_count} แหล่งข่าว\n"
+            f"อ่านต่อ: {item['url']}"
+        )
+    return "\n\n".join(parts), top_items
 
 
 def push_line(items):
@@ -432,7 +650,7 @@ def push_line(items):
         print("line_skipped missing LINE_CHANNEL_ACCESS_TOKEN or LINE_TO_IDS")
         return
 
-    text = line_message(items)
+    text, sent_items = line_message(items)
     if not text:
         print("line_skipped no top items")
         return
@@ -442,15 +660,23 @@ def push_line(items):
         payload = {"to": to_id, "messages": [{"type": "text", "text": text[:4900]}]}
         request_json("https://api.line.me/v2/bot/message/push", method="POST", payload=payload, headers=headers)
         print(f"line_sent to={to_id}")
+    mark_line_sent(sent_items)
 
 
 def main():
     items = collect_news()
-    limit = env_int("MAX_ARTICLES_PER_RUN", 12)
+    limit = env_int("MAX_ARTICLES_PER_RUN", 18)
     enriched = []
     for item in items[:limit]:
         ai = summarize_with_gemini(item)
-        enriched.append({**item, **ai})
+        row = {**item, **ai}
+        row["trending_score"] = final_trending_score(row)
+        row["line_candidate"] = (
+            row.get("trending_score", 0) >= 78
+            and row.get("importance_score", 0) >= 60
+            and contains_thai(row.get("summary_th", ""))
+        )
+        enriched.append(row)
         time.sleep(0.25)
 
     save_to_supabase(enriched)

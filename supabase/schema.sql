@@ -9,6 +9,12 @@ create table if not exists public.articles (
   url text not null,
   provider text not null,
   raw_summary text,
+  story_id text,
+  source_count integer not null default 1,
+  source_urls jsonb not null default '[]'::jsonb,
+  trending_score integer not null default 50,
+  line_candidate boolean not null default false,
+  line_sent_at timestamptz,
   importance_score integer not null default 50,
   published_at timestamptz not null,
   updated_at timestamptz not null default now(),
@@ -20,6 +26,12 @@ create index if not exists articles_published_at_idx
 
 create index if not exists articles_category_idx
   on public.articles (category);
+
+create index if not exists articles_trending_score_idx
+  on public.articles (trending_score desc);
+
+create index if not exists articles_line_candidate_idx
+  on public.articles (line_candidate, line_sent_at);
 
 alter table public.articles enable row level security;
 
