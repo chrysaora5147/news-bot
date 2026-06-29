@@ -326,6 +326,13 @@ def final_trending_score(item):
     return min(100, base + source_boost + keyword_boost + freshness_boost)
 
 
+def fallback_importance_score(item):
+    text = f"{item.get('title', '')} {item.get('raw_summary', '')}"
+    if not contains_thai(text):
+        return 40
+    return min(78, max(55, pre_ai_story_score(item) - 15))
+
+
 def tavily_search(query):
     api_key = os.getenv("TAVILY_API_KEY")
     if not api_key:
@@ -449,7 +456,7 @@ def summarize_with_gemini(item):
             "summary": fallback_text,
             "summary_th": fallback_text,
             "category": classify_without_ai(item),
-            "importance_score": 40,
+            "importance_score": fallback_importance_score(item),
         }
 
     prompt = {
@@ -508,7 +515,7 @@ def summarize_with_gemini(item):
         "summary": fallback_text,
         "summary_th": fallback_text,
         "category": classify_without_ai(item),
-        "importance_score": 40,
+        "importance_score": fallback_importance_score(item),
     }
 
 
