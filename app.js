@@ -182,7 +182,7 @@ async function loadSupabaseNews() {
     return fallbackNews;
   }
 
-  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,summary,category,source,url,importance_score,published_at&order=published_at.desc&limit=60`;
+  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,summary,category,source,url,importance_score,published_at&importance_score=gte.50&order=importance_score.desc&order=published_at.desc&limit=60`;
   const response = await fetch(endpoint, {
     headers: {
       apikey: config.supabaseAnonKey,

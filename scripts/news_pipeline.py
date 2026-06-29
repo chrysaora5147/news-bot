@@ -355,6 +355,8 @@ def save_to_supabase(items):
 
     rows = []
     for item in items:
+        if item["importance_score"] < 50:
+            continue
         rows.append(
             {
                 "id": item["id"],
@@ -377,6 +379,9 @@ def save_to_supabase(items):
         "Authorization": f"Bearer {service_key}",
         "Prefer": "resolution=merge-duplicates",
     }
+    if not rows:
+        print("supabase_skipped no rows above importance threshold")
+        return
     request_json(endpoint, method="POST", payload=rows, headers=headers)
     print(f"supabase_saved rows={len(rows)}")
 
