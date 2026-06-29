@@ -45,7 +45,7 @@ DEFAULT_QUERIES = [
 ]
 
 DEFAULT_SUPABASE_URL = "https://zaqvrwsooxdtkepaaunk.supabase.co"
-DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
 DEFAULT_CATEGORIES = [
     "ข่าวด่วน",
@@ -116,6 +116,11 @@ LOW_QUALITY_PATTERNS = [
     "เลขเด็ด",
     "คลิป",
     "viral",
+    "watch ",
+    "full interview",
+    "morning bid",
+    "newsletter",
+    "live updates",
     "appeared first",
     "เปิดเกมรุก",
     "ทุ่มงบการตลาด",
@@ -499,11 +504,51 @@ def final_trending_score(item):
     return min(100, int(base * 0.72) + quality_boost + source_boost + keyword_boost + freshness_boost + provider_boost)
 
 
-def fallback_importance_score(item):
+def fallback_importance_score(item, translated=False):
     text = f"{item.get('title', '')} {item.get('raw_summary', '')}"
-    if not contains_thai(text) or is_low_quality_story(item) or is_stale_dated_story(item):
+    if is_low_quality_story(item) or is_stale_dated_story(item):
         return 40
-    return min(78, max(55, pre_ai_story_score(item) - 18))
+    if not contains_thai(text) and not translated:
+        return 40
+    floor = 60 if translated and source_quality_score(item) >= 20 else 55
+    ceiling = 76 if translated else 78
+    return min(ceiling, max(floor, pre_ai_story_score(item) - 18))
+
+
+def translate_text_th(value):
+    value = clean_text(value)[:900]
+    if not value or contains_thai(value):
+        return value
+    params = urllib.parse.urlencode(
+        {
+            "client": "gtx",
+            "sl": "auto",
+            "tl": "th",
+            "dt": "t",
+            "q": value,
+        }
+    )
+    try:
+        result = request_json(f"https://translate.googleapis.com/translate_a/single?{params}", timeout=15)
+        translated = "".join(part[0] for part in result[0] if part and part[0])
+        return clean_text(translated)
+    except Exception as exc:
+        print(f"translate_failed title={value[:60]} error={exc}", file=sys.stderr)
+        return ""
+
+
+def translated_fallback(item):
+    title_th = translate_text_th(clean_fallback_title(item["title"]))
+    summary_source = clean_fallback_summary(item.get("raw_summary"), item["title"])
+    summary_th = translate_text_th(summary_source)
+    translated = contains_thai(title_th) and contains_thai(summary_th)
+    return {
+        "title_th": title_th or clean_fallback_title(item["title"]),
+        "summary": summary_th or summary_source,
+        "summary_th": summary_th or summary_source,
+        "category": classify_without_ai(item),
+        "importance_score": fallback_importance_score(item, translated=translated),
+    }
 
 
 def google_news_rss_search(query):
@@ -605,8 +650,8 @@ def classify_without_ai(item):
         ("ทองคำ", ["ทอง", "gold"]),
         ("คริปโต", ["bitcoin", "crypto", "คริปโต", "บิตคอยน์"]),
         ("การเมือง", ["รัฐบาล", "ครม", "สภา", "นายก", "เลือกตั้ง"]),
-        ("เศรษฐกิจ", ["เศรษฐกิจ", "ดอกเบี้ย", "เงินเฟ้อ", "เงินบาท", "gdp"]),
-        ("ต่างประเทศ", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global"]),
+        ("เศรษฐกิจ", ["เศรษฐกิจ", "ดอกเบี้ย", "เงินเฟ้อ", "เงินบาท", "gdp", "fed", "federal reserve", "central bank", "inflation"]),
+        ("ต่างประเทศ", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global", "iran", "trump", "china", "russia", "war"]),
         ("เทคโนโลยี", ["ai", "เทคโนโลยี", "ชิป", "semiconductor"]),
         ("พลังงาน", ["น้ำมัน", "พลังงาน", "ก๊าซ"]),
         ("กีฬา", ["ฟุตบอล", "กีฬา", "บอล"]),
@@ -631,14 +676,7 @@ def gemini_models():
 def summarize_with_gemini(item):
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        fallback_text = clean_fallback_summary(item.get("raw_summary"), item["title"])
-        return {
-            "title_th": clean_fallback_title(item["title"]),
-            "summary": fallback_text,
-            "summary_th": fallback_text,
-            "category": classify_without_ai(item),
-            "importance_score": fallback_importance_score(item),
-        }
+        return translated_fallback(item)
 
     prompt = {
         "contents": [
@@ -694,14 +732,7 @@ def summarize_with_gemini(item):
             print(f"gemini_failed model={model} title={item['title'][:60]} error={exc}", file=sys.stderr)
 
     print(f"gemini_all_models_failed title={item['title'][:60]}", file=sys.stderr)
-    fallback_text = clean_fallback_summary(item.get("raw_summary"), item["title"])
-    return {
-        "title_th": clean_fallback_title(item["title"]),
-        "summary": fallback_text,
-        "summary_th": fallback_text,
-        "category": classify_without_ai(item),
-        "importance_score": fallback_importance_score(item),
-    }
+    return translated_fallback(item)
 
 
 def collect_news():
