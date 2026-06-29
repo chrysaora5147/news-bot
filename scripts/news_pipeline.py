@@ -112,6 +112,10 @@ def clean_text(value):
     return re.sub(r"\s+", " ", value).strip()
 
 
+def contains_thai(value):
+    return any("\u0e00" <= char <= "\u0e7f" for char in value or "")
+
+
 def stable_id(url, title):
     key = (url or title).strip().lower()
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -283,7 +287,7 @@ def summarize_with_gemini(item):
             "summary": fallback_text,
             "summary_th": fallback_text,
             "category": classify_without_ai(item),
-            "importance_score": 55,
+            "importance_score": 40,
         }
 
     prompt = {
@@ -320,12 +324,15 @@ def summarize_with_gemini(item):
             category = parsed.get("category") if parsed.get("category") in DEFAULT_CATEGORIES else classify_without_ai(item)
             summary_th = clean_text(parsed.get("summary_th") or parsed.get("summary"))[:600]
             title_th = clean_text(parsed.get("title_th"))[:220]
+            importance_score = int(parsed.get("importance_score") or 55)
+            if not contains_thai(summary_th):
+                importance_score = min(importance_score, 40)
             return {
                 "title_th": title_th or item["title"],
                 "summary": summary_th or item.get("raw_summary") or item["title"],
                 "summary_th": summary_th or item.get("raw_summary") or item["title"],
                 "category": category,
-                "importance_score": int(parsed.get("importance_score") or 55),
+                "importance_score": importance_score,
             }
         except Exception as exc:
             print(f"gemini_failed model={model} title={item['title'][:60]} error={exc}", file=sys.stderr)
@@ -339,7 +346,7 @@ def summarize_with_gemini(item):
         "summary": fallback_text,
         "summary_th": fallback_text,
         "category": classify_without_ai(item),
-        "importance_score": 50,
+        "importance_score": 40,
     }
 
 
