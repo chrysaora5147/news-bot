@@ -13,9 +13,7 @@ from datetime import datetime, timezone
 
 
 DEFAULT_RSS_FEEDS = [
-    "https://www.thaipbs.or.th/rss/news.xml",
     "https://www.bangkokpost.com/rss/data/topstories.xml",
-    "https://www.nationthailand.com/rss",
 ]
 
 DEFAULT_QUERIES = [
@@ -23,8 +21,8 @@ DEFAULT_QUERIES = [
     "ข่าวเศรษฐกิจไทยวันนี้",
     "หุ้นไทยวันนี้",
     "ราคาทองวันนี้",
-    "ข่าวต่างประเทศวันนี้",
-    "ข่าวคริปโตวันนี้",
+    "ข่าวการเมืองไทยวันนี้",
+    "ข่าวธุรกิจไทยวันนี้",
 ]
 
 DEFAULT_SUPABASE_URL = "https://zaqvrwsooxdtkepaaunk.supabase.co"
@@ -96,6 +94,10 @@ def request_json(url, method="GET", payload=None, headers=None, timeout=25):
     with urllib.request.urlopen(req, timeout=timeout) as response:
         body = response.read().decode("utf-8")
         return json.loads(body) if body else {}
+
+
+def is_rate_limited(exc):
+    return getattr(exc, "code", None) == 429
 
 
 def request_text(url, timeout=25):
@@ -316,6 +318,8 @@ def summarize_with_gemini(item):
             }
         except Exception as exc:
             print(f"gemini_failed model={model} title={item['title'][:60]} error={exc}", file=sys.stderr)
+            if is_rate_limited(exc):
+                break
 
     print(f"gemini_all_models_failed title={item['title'][:60]}", file=sys.stderr)
     return {
@@ -408,7 +412,7 @@ def push_line(items):
 
 def main():
     items = collect_news()
-    limit = env_int("MAX_ARTICLES_PER_RUN", 30)
+    limit = env_int("MAX_ARTICLES_PER_RUN", 12)
     enriched = []
     for item in items[:limit]:
         ai = summarize_with_gemini(item)
