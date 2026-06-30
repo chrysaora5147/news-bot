@@ -35,9 +35,22 @@ DEFAULT_RSS_FEEDS = [
     "https://www.khaosod.co.th/feed",
     "https://www.thairath.co.th/rss/news",
     "https://www.kaohoon.com/feed",
+    "https://feeds.bbci.co.uk/sport/football/rss.xml",
+    "https://www.theguardian.com/football/rss",
+    "https://www.espn.com/espn/rss/soccer/news",
+    "https://www.ballthai.com/feed/",
+    "https://www.thairath.co.th/rss/sport",
+    "https://www.khaosod.co.th/sports/feed",
 ]
 
 DEFAULT_QUERIES = [
+]
+
+SPORTS_NEWS_QUERIES = [
+    "ฟุตบอลโลก 2026 พลิกล็อก ผลบอล",
+    "บอลโลก 2026 ผลการแข่งขันเมื่อคืน",
+    "FIFA World Cup 2026 upset results",
+    "World Cup 2026 Paraguay Germany Morocco Netherlands penalties",
 ]
 
 DEFAULT_SUPABASE_URL = "https://zaqvrwsooxdtkepaaunk.supabase.co"
@@ -100,6 +113,86 @@ TRENDING_KEYWORDS = [
     "ai",
     "chip",
     "semiconductor",
+    "ฟุตบอลโลก",
+    "บอลโลก",
+    "world cup",
+    "fifa",
+    "upset",
+    "penalty",
+    "penalties",
+    "ผลบอล",
+    "พลิกล็อก",
+]
+
+POLITICS_LINE_BLOCK_TERMS = [
+    "รัฐบาล",
+    "ครม",
+    "นายก",
+    "สภา",
+    "รัฐมนตรี",
+    "กระทรวง",
+    "พรรค",
+    "ฝ่ายค้าน",
+    "เลือกตั้ง",
+    "งบประมาณ",
+    "งบจังหวัด",
+    "ปรับลดงบ",
+    "ชี้แจง",
+    "แจง",
+    "โต้",
+    "ซัด",
+    "อภิปราย",
+    "ส.ส.",
+    "สว.",
+    "senate",
+    "parliament",
+    "minister",
+    "government",
+    "election",
+    "trump",
+    "putin",
+]
+
+CRIME_LINE_BLOCK_TERMS = [
+    "ติดคุก",
+    "จำคุก",
+    "เรือนจำ",
+    "ศาล",
+    "คดี",
+    "ฟ้อง",
+    "จับกุม",
+    "ฉ้อโกง",
+    "ทุจริต",
+    "ฆ่า",
+    "ข่มขืน",
+    "ล่วงละเมิด",
+    "prison",
+    "jail",
+    "court",
+    "fraud",
+    "arrested",
+    "sentenced",
+]
+
+MAJOR_INCIDENT_TERMS = [
+    "แผ่นดินไหว",
+    "สึนามิ",
+    "เครื่องบินตก",
+    "ไฟไหม้",
+    "น้ำท่วม",
+    "ถล่ม",
+    "ระเบิด",
+    "เสียชีวิต",
+    "ผู้เสียชีวิต",
+    "บาดเจ็บ",
+    "earthquake",
+    "tsunami",
+    "crash",
+    "flood",
+    "explosion",
+    "dead",
+    "killed",
+    "injured",
 ]
 
 GENERIC_STORY_WORDS = {
@@ -206,6 +299,9 @@ SOURCE_QUALITY = {
     "ft.com": 28,
     "scmp.com": 22,
     "channelnewsasia.com": 22,
+    "theguardian.com": 24,
+    "espn.com": 22,
+    "skysports.com": 18,
     "bangkokpost.com": 18,
     "infoquest.co.th": 20,
     "prachachat.net": 16,
@@ -215,6 +311,7 @@ SOURCE_QUALITY = {
     "khaosod.co.th": 14,
     "thairath.co.th": 13,
     "kaohoon.com": 16,
+    "ballthai.com": 13,
     "nationthailand.com": 13,
     "thaipost.net": 12,
     "naewna.com": 11,
@@ -364,6 +461,47 @@ def contains_term(text, term):
 
 def contains_any_term(text, terms):
     return any(contains_term(text, term) for term in terms)
+
+
+def text_for_decision(item):
+    return f"{item.get('title', '')} {item.get('raw_summary', '')} {item.get('title_th', '')} {item.get('summary_th', '')} {item.get('category', '')}".lower()
+
+
+def has_large_casualty_signal(text):
+    if any(word in text for word in ["ร้อย", "พัน", "หมื่น", "แสน", "hundreds", "thousands"]):
+        return contains_any_term(text, MAJOR_INCIDENT_TERMS)
+    for number_text in re.findall(r"\d[\d,]*", text):
+        try:
+            number = int(number_text.replace(",", ""))
+        except ValueError:
+            continue
+        if number >= 50 and contains_any_term(text, MAJOR_INCIDENT_TERMS):
+            return True
+    return False
+
+
+def is_major_incident(item):
+    text = text_for_decision(item)
+    return contains_any_term(text, MAJOR_INCIDENT_TERMS) and has_large_casualty_signal(text)
+
+
+def is_line_blocked_topic(item):
+    text = text_for_decision(item)
+    if is_major_incident(item):
+        return False
+    return contains_any_term(text, POLITICS_LINE_BLOCK_TERMS) or contains_any_term(text, CRIME_LINE_BLOCK_TERMS)
+
+
+def is_line_worthy(item):
+    if item.get("translation_fallback"):
+        return False
+    if not contains_thai(item.get("summary_th", "")):
+        return False
+    if is_low_quality_output(item) or is_line_blocked_topic(item):
+        return False
+    if item.get("category") in {"ทองคำ", "หุ้น", "เศรษฐกิจ", "คริปโต", "เทคโนโลยี", "ธุรกิจ", "กีฬา"}:
+        return True
+    return is_major_incident(item)
 
 
 def stable_id(url, title):
@@ -753,9 +891,9 @@ def translated_fallback(item):
     }
 
 
-def google_news_rss_search(query):
+def google_news_rss_search(query, hl="en-US", gl="US", ceid="US:en"):
     encoded = urllib.parse.quote_plus(query)
-    url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+    url = f"https://news.google.com/rss/search?q={encoded}&hl={hl}&gl={gl}&ceid={ceid}"
     return [{**item, "provider": "google_news"} for item in extract_rss_items(url)[:12]]
 
 
@@ -857,7 +995,7 @@ def classify_without_ai(item):
         ("ไทย", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global", "trump", "china"]),
         ("เทคโนโลยี", ["ai", "เทคโนโลยี", "ชิป", "semiconductor"]),
         ("เศรษฐกิจ", ["น้ำมัน", "พลังงาน", "ก๊าซ"]),
-        ("กีฬา", ["ฟุตบอล", "กีฬา", "บอล"]),
+        ("กีฬา", ["ฟุตบอล", "กีฬา", "บอล", "บอลโลก", "ฟุตบอลโลก", "world cup", "fifa", "penalty", "penalties", "ผลบอล", "พลิกล็อก", "paraguay", "germany", "morocco", "netherlands"]),
         ("ธุรกิจ", ["บริษัท", "ธุรกิจ", "ยอดขาย", "รายได้", "กำไร", "ลงทุน"]),
     ]
     for category, keywords in rules:
@@ -893,6 +1031,7 @@ def summarize_with_gemini(item):
                             "summary_th ต้องเป็นสรุปภาษาไทย 1-2 ประโยค บอกว่าเกิดอะไรขึ้น ทำไมสำคัญ และกระทบใคร ไม่เกิน 450 ตัวอักษร "
                             f"category ต้องเป็นหนึ่งใน {DEFAULT_CATEGORIES}. "
                             "importance_score ให้ 0-100 เฉพาะข่าวที่มีผลต่อเศรษฐกิจ ตลาด การเมือง เทคโนโลยี ภูมิรัฐศาสตร์ "
+                            "กีฬาใหญ่ระดับโลก เช่น ฟุตบอลโลก ผลการแข่งขันพลิกล็อก หรือแมตช์สำคัญ "
                             "หรือเป็นเหตุการณ์ใหญ่ระดับประเทศ/โลกเท่านั้นจึงควรเกิน 70 "
                             "ข่าว advertorial, โปรโมชัน, ไวรัล, รายการวิดีโอ, gossip หรือเรื่องเล็กมากให้ต่ำกว่า 50 "
                             f"หัวข้อ: {item['title']}\n"
@@ -942,6 +1081,10 @@ def collect_news():
     feeds = DEFAULT_RSS_FEEDS + [feed for feed in configured_feeds if feed not in DEFAULT_RSS_FEEDS]
     for feed in feeds:
         items.extend(extract_rss_items(feed))
+        time.sleep(0.2)
+
+    for query in SPORTS_NEWS_QUERIES:
+        items.extend(google_news_rss_search(query, hl="th", gl="TH", ceid="TH:th")[:8])
         time.sleep(0.2)
 
     for query in env_list("NEWS_SEARCH_QUERIES", DEFAULT_QUERIES):
@@ -1119,8 +1262,7 @@ def main():
         row["line_candidate"] = (
             row.get("trending_score", 0) >= LINE_MIN_TRENDING_SCORE
             and row.get("importance_score", 0) >= LINE_MIN_IMPORTANCE_SCORE
-            and not row.get("translation_fallback")
-            and contains_thai(row.get("summary_th", ""))
+            and is_line_worthy(row)
         )
         enriched.append(row)
         time.sleep(0.25)
