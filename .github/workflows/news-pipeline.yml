@@ -1,6 +1,11 @@
 name: News Pipeline
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/news_pipeline.py"
+      - ".github/workflows/news-pipeline.yml"
   workflow_dispatch:
     inputs:
       send_line:
