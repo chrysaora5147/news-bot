@@ -218,7 +218,7 @@ async function loadSupabaseNews() {
   }
 
   const rows = await response.json();
-  return rows.filter((row) => visibleCategories.has(row.category)).map((row, index) => ({
+  return rows.filter((row) => visibleCategories.has(row.category) && (row.trending_score || row.importance_score || 0) > 45).map((row, index) => ({
     title: row.title_th || row.title,
     category: row.category,
     time: new Date(row.published_at).toLocaleTimeString("th-TH", {

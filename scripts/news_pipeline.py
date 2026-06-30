@@ -47,10 +47,11 @@ DEFAULT_QUERIES = [
 ]
 
 SPORTS_NEWS_QUERIES = [
-    "ฟุตบอลโลก 2026 พลิกล็อก ผลบอล",
-    "บอลโลก 2026 ผลการแข่งขันเมื่อคืน",
-    "FIFA World Cup 2026 upset results",
-    "World Cup 2026 Paraguay Germany Morocco Netherlands penalties",
+    "ฟุตบอลโลก 2026 ผลการแข่งขันเมื่อคืน พลิกล็อก",
+    "บอลโลก 2026 รอบน็อกเอาต์ ผลบอลเมื่อคืน",
+    "FIFA World Cup 2026 upset results knockout",
+    "World Cup 2026 Germany Paraguay Morocco Netherlands result penalties",
+    "World Cup 2026 match report upset last night",
 ]
 
 DEFAULT_SUPABASE_URL = "https://zaqvrwsooxdtkepaaunk.supabase.co"
@@ -286,6 +287,67 @@ LOW_QUALITY_PATTERNS = [
     "ดวง",
     "หวย",
     "ซุบซิบ",
+    "cartoon",
+    "david squires",
+    "as it happened",
+    "live coverage",
+    "podcast",
+    "opinion",
+    "comment",
+    "newsletter",
+    "quiz",
+    "who did it best",
+    "ใครทำได้ดีที่สุด",
+    "best photos",
+    "in pictures",
+    "cult hero",
+    "ฮีโร่ลัทธิ",
+    "dreamboat",
+    "klopp",
+    "คล็อปป์",
+    "rooney",
+    "mainoo",
+    "nagelsmann",
+    "ไม่ใช่ทีมชั้นหนึ่ง",
+    "การ์ตูน",
+    "ถ่ายทอดสด",
+]
+
+LOW_VALUE_LINE_TERMS = [
+    "ติมอร์-เลสเต",
+    "timor-leste",
+    "สำนักงาน",
+    "เปิดสำนักงาน",
+    "กระชับสัมพันธ์",
+    "ดึงลงทุน",
+    "สัมมนา",
+    "อีเวนต์",
+    "event",
+]
+
+WORLD_CUP_RESULT_TERMS = [
+    "ผลบอล",
+    "ผลการแข่งขัน",
+    "รอบน็อกเอาต์",
+    "รอบ 16 ทีม",
+    "รอบ 32 ทีม",
+    "เข้ารอบ",
+    "ตกรอบ",
+    "ยิงจุดโทษ",
+    "พลิกล็อก",
+    "ช็อก",
+    "knockout",
+    "last 16",
+    "round of 16",
+    "round of 32",
+    "result",
+    "results",
+    "beat",
+    "beats",
+    "eliminate",
+    "eliminates",
+    "upset",
+    "penalties",
 ]
 
 BAD_SOURCE_PATTERNS = [
@@ -511,6 +573,20 @@ def is_world_cup_story(item):
     )
 
 
+def is_world_cup_result_story(item):
+    text = text_for_decision(item)
+    return is_world_cup_story(item) and contains_any_term(text, WORLD_CUP_RESULT_TERMS)
+
+
+def is_low_value_line_story(item):
+    text = text_for_decision(item)
+    if contains_any_term(text, LOW_VALUE_LINE_TERMS):
+        return True
+    if item.get("category") == "ธุรกิจ" and is_foreign_source(item) and item.get("source_count", 1) < 2:
+        return True
+    return False
+
+
 def is_line_blocked_topic(item):
     text = text_for_decision(item)
     if is_major_incident(item):
@@ -523,10 +599,10 @@ def is_line_worthy(item):
         return False
     if not contains_thai(item.get("summary_th", "")):
         return False
-    if is_low_quality_output(item) or is_line_blocked_topic(item):
+    if is_low_quality_story(item) or is_low_quality_output(item) or is_line_blocked_topic(item) or is_low_value_line_story(item):
         return False
     if item.get("category") == "กีฬา":
-        return is_world_cup_story(item)
+        return is_world_cup_result_story(item)
     if item.get("category") in {"ทองคำ", "หุ้น", "เศรษฐกิจ", "คริปโต", "เทคโนโลยี", "ธุรกิจ"}:
         return True
     return is_major_incident(item)
@@ -1057,6 +1133,7 @@ def summarize_with_gemini(item):
                             "\"category\":\"one category\",\"importance_score\":number}. "
                             "title_th ต้องเป็นหัวข้อข่าวภาษาไทยที่บอกสาระสำคัญ ไม่ใช่หัวข้อ SEO หรือชื่อรายการ "
                             "summary_th ต้องเป็นสรุปภาษาไทย 1-2 ประโยค บอกว่าเกิดอะไรขึ้น ทำไมสำคัญ และกระทบใคร ไม่เกิน 450 ตัวอักษร "
+                            "ถ้าเป็นข่าวกีฬา ให้เขียนให้รู้ผลการแข่งขันหรือประเด็นหลักทันที เช่น ใครชนะ ใครตกรอบ ทำไมพลิกล็อก "
                             f"category ต้องเป็นหนึ่งใน {DEFAULT_CATEGORIES}. "
                             "importance_score ให้ 0-100 เฉพาะข่าวที่มีผลต่อเศรษฐกิจ ตลาด การเมือง เทคโนโลยี ภูมิรัฐศาสตร์ "
                             "กีฬาใหญ่ระดับโลก เช่น ฟุตบอลโลก ผลการแข่งขันพลิกล็อก หรือแมตช์สำคัญ "
@@ -1287,13 +1364,19 @@ def main():
         if (
             row.get("translation_fallback")
             and not acceptable_fallback(row)
-            and not (row.get("category") == "กีฬา" and is_world_cup_story(row))
+            and not (row.get("category") == "กีฬา" and is_world_cup_result_story(row))
         ) or not row.get("image_url"):
             row["importance_score"] = min(row["importance_score"], 55)
             row["trending_score"] = min(row["trending_score"], 55)
-        if row.get("category") == "กีฬา" and is_world_cup_story(row):
+        if row.get("category") == "กีฬา" and is_world_cup_result_story(row) and not is_low_quality_story(row) and not is_low_quality_output(row):
             row["importance_score"] = max(row.get("importance_score", 0), 68)
             row["trending_score"] = max(row.get("trending_score", 0), 82)
+        elif row.get("category") == "กีฬา":
+            row["importance_score"] = min(row["importance_score"], 55)
+            row["trending_score"] = min(row["trending_score"], 55)
+        if is_low_quality_story(row) or is_low_quality_output(row):
+            row["importance_score"] = min(row["importance_score"], 45)
+            row["trending_score"] = min(row["trending_score"], 45)
         row["line_candidate"] = (
             row.get("trending_score", 0) >= LINE_MIN_TRENDING_SCORE
             and row.get("importance_score", 0) >= LINE_MIN_IMPORTANCE_SCORE
