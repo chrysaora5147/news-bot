@@ -1062,7 +1062,7 @@ def push_line(items):
 
 def main():
     items = collect_news()
-    limit = env_int("MAX_ARTICLES_PER_RUN", 10)
+    limit = env_int("MAX_ARTICLES_PER_RUN", 30)
     enriched = []
     for item in items[:limit]:
         if not item.get("image_url"):
