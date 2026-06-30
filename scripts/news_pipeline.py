@@ -195,6 +195,13 @@ SOURCE_QUALITY = {
     "infoquest.co.th": 20,
     "prachachat.net": 16,
     "thestandard.co": 16,
+    "thaipbs.or.th": 18,
+    "matichon.co.th": 15,
+    "khaosod.co.th": 14,
+    "thairath.co.th": 13,
+    "nationthailand.com": 13,
+    "thaipost.net": 12,
+    "naewna.com": 11,
     "reuters": 30,
     "bloomberg": 30,
     "associated press": 28,
@@ -505,6 +512,17 @@ def is_low_quality_output(item):
 
 def passes_source_gate(item):
     return source_quality_score(item) >= 16 or item.get("source_count", 1) >= 2
+
+
+def acceptable_fallback(item):
+    original_text = f"{item.get('title', '')} {item.get('raw_summary', '')}"
+    return (
+        item.get("translation_fallback")
+        and contains_thai(original_text)
+        and item.get("image_url")
+        and item.get("source_count", 1) >= 2
+        and not is_low_quality_story(item)
+    )
 
 
 def is_stale_dated_story(item):
@@ -914,7 +932,7 @@ def save_to_supabase(items):
             or item.get("trending_score", 0) < 65
             or is_low_quality_output(item)
             or not passes_source_gate(item)
-            or item.get("translation_fallback")
+            or (item.get("translation_fallback") and not acceptable_fallback(item))
             or not item.get("image_url")
         ):
             continue
@@ -1055,7 +1073,7 @@ def main():
         if is_low_quality_output(row) or not passes_source_gate(row):
             row["importance_score"] = min(row["importance_score"], 45)
             row["trending_score"] = min(row["trending_score"], 45)
-        if row.get("translation_fallback") or not row.get("image_url"):
+        if (row.get("translation_fallback") and not acceptable_fallback(row)) or not row.get("image_url"):
             row["importance_score"] = min(row["importance_score"], 55)
             row["trending_score"] = min(row["trending_score"], 55)
         row["line_candidate"] = (
