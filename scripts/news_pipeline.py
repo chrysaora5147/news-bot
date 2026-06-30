@@ -93,6 +93,49 @@ TRENDING_KEYWORDS = [
     "semiconductor",
 ]
 
+GENERIC_STORY_WORDS = {
+    "news",
+    "latest",
+    "breaking",
+    "live",
+    "update",
+    "updates",
+    "analysis",
+    "today",
+    "says",
+    "said",
+    "after",
+    "before",
+    "over",
+    "amid",
+    "from",
+    "with",
+    "into",
+    "about",
+    "could",
+    "would",
+    "should",
+    "will",
+    "new",
+    "top",
+    "world",
+    "market",
+    "markets",
+    "stock",
+    "stocks",
+    "shares",
+    "ข่าว",
+    "วันนี้",
+    "ล่าสุด",
+    "ด่วน",
+    "สด",
+    "อัปเดต",
+    "อัพเดต",
+    "ตลาด",
+    "หุ้น",
+    "ไทย",
+}
+
 LOW_QUALITY_PATTERNS = [
     "topicstoday",
     "topics today",
@@ -289,6 +332,17 @@ def contains_thai(value):
     return any("\u0e00" <= char <= "\u0e7f" for char in value or "")
 
 
+def contains_term(text, term):
+    term = term.lower()
+    if re.fullmatch(r"[a-z0-9&.+'-]+(?:\s+[a-z0-9&.+'-]+)*", term):
+        return re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", text) is not None
+    return term in text
+
+
+def contains_any_term(text, terms):
+    return any(contains_term(text, term) for term in terms)
+
+
 def stable_id(url, title):
     key = (url or title).strip().lower()
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -318,12 +372,34 @@ def story_similarity(left, right):
         return 0
 
     sequence_score = SequenceMatcher(None, left_norm, right_norm).ratio()
-    left_tokens = {token for token in left_norm.split() if len(token) > 2}
-    right_tokens = {token for token in right_norm.split() if len(token) > 2}
+    left_tokens = story_tokens(left_norm)
+    right_tokens = story_tokens(right_norm)
     token_score = 0
     if left_tokens and right_tokens:
         token_score = len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
     return max(sequence_score, token_score)
+
+
+def story_tokens(value):
+    return {
+        token
+        for token in value.split()
+        if len(token) > 2 and token not in GENERIC_STORY_WORDS and not token.isdigit()
+    }
+
+
+def is_same_story(left, right):
+    left_norm = normalize_story_text(left)
+    right_norm = normalize_story_text(right)
+    if not left_norm or not right_norm:
+        return False
+
+    sequence_score = SequenceMatcher(None, left_norm, right_norm).ratio()
+    left_tokens = story_tokens(left_norm)
+    right_tokens = story_tokens(right_norm)
+    common_tokens = left_tokens & right_tokens
+    token_score = len(common_tokens) / len(left_tokens | right_tokens) if left_tokens and right_tokens else 0
+    return sequence_score >= 0.82 or (token_score >= 0.45 and len(common_tokens) >= 2)
 
 
 def normalize_category(category):
@@ -336,6 +412,25 @@ def normalize_category(category):
     if category in {"บันเทิง", "สุขภาพ", "ท่องเที่ยว", "สิ่งแวดล้อม"}:
         return "ไทย"
     return "ไทย"
+
+
+def validated_category(item, requested_category=None):
+    requested = normalize_category(requested_category or "")
+    rule_category = classify_without_ai(item)
+    text = f"{item.get('title', '')} {item.get('raw_summary', '')} {item.get('title_th', '')} {item.get('summary_th', '')}".lower()
+    stock_terms = ["หุ้น", "set index", "set50", "set100", "sethd", "mai index", "ตลาดหลักทรัพย์", "ดัชนี", "delta", "nasdaq", "s&p", "dow jones"]
+    business_terms = ["บริษัท", "ธุรกิจ", "ยอดขาย", "รายได้", "กำไร", "ลงทุน", "deal", "merger", "acquisition"]
+    breaking_terms = ["attack", "attacks", "war", "missile", "dead", "killed", "gaza", "israel", "iran", "russia", "ukraine", "earthquake", "โจมตี", "สงคราม", "เสียชีวิต", "แผ่นดินไหว"]
+
+    if requested == "หุ้น" and not contains_any_term(text, stock_terms):
+        return rule_category
+    if requested == "ธุรกิจ" and contains_any_term(text, breaking_terms):
+        return "ข่าวด่วน"
+    if requested == "ไทย" and is_foreign_source(item) and contains_any_term(text, breaking_terms):
+        return "ข่าวด่วน"
+    if requested == "ไทย" and is_foreign_source(item) and contains_any_term(text, business_terms):
+        return "ธุรกิจ"
+    return requested if requested in DEFAULT_CATEGORIES else rule_category
 
 
 def source_key(item):
@@ -476,7 +571,7 @@ def cluster_news(items):
     for item in sorted_items:
         matched = None
         for cluster in clusters:
-            if story_similarity(item["title"], cluster["title"]) >= 0.48:
+            if is_same_story(item["title"], cluster["title"]):
                 matched = cluster
                 break
         if matched:
@@ -598,7 +693,7 @@ def translated_fallback(item):
         "title_th": title_th or clean_fallback_title(item["title"]),
         "summary": summary_th or summary_source,
         "summary_th": summary_th or summary_source,
-        "category": classify_without_ai(item),
+        "category": validated_category(item, classify_without_ai(item)),
         "importance_score": fallback_importance_score(item, translated=translated),
         "translation_fallback": True,
     }
@@ -699,19 +794,20 @@ def serpapi_search(query):
 def classify_without_ai(item):
     text = f"{item['title']} {item.get('raw_summary', '')}".lower()
     rules = [
-        ("หุ้น", ["หุ้น", "set", "ตลาดหลักทรัพย์", "ดัชนี"]),
+        ("หุ้น", ["หุ้น", "set index", "set50", "set100", "sethd", "mai index", "ตลาดหลักทรัพย์", "ดัชนี"]),
         ("ทองคำ", ["ทอง", "gold"]),
         ("คริปโต", ["bitcoin", "crypto", "คริปโต", "บิตคอยน์"]),
+        ("ข่าวด่วน", ["attack", "attacks", "war", "missile", "dead", "killed", "gaza", "israel", "iran", "russia", "ukraine", "earthquake", "โจมตี", "สงคราม", "เสียชีวิต", "แผ่นดินไหว"]),
         ("ไทย", ["รัฐบาล", "ครม", "สภา", "นายก", "เลือกตั้ง"]),
-        ("เศรษฐกิจ", ["เศรษฐกิจ", "ดอกเบี้ย", "เงินเฟ้อ", "เงินบาท", "เงินเยน", "ค่าเงิน", "gdp", "fed", "federal reserve", "central bank", "inflation", "yen", "currency", "factory", "manufacturing"]),
-        ("ไทย", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global", "iran", "trump", "china", "russia", "war"]),
+        ("เศรษฐกิจ", ["เศรษฐกิจ", "ดอกเบี้ย", "เงินเฟ้อ", "เงินบาท", "เงินเยน", "ค่าเงิน", "gdp", "fed", "federal reserve", "central bank", "inflation", "yen", "currency", "factory", "manufacturing", "tariff", "trade"]),
+        ("ไทย", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global", "trump", "china"]),
         ("เทคโนโลยี", ["ai", "เทคโนโลยี", "ชิป", "semiconductor"]),
         ("เศรษฐกิจ", ["น้ำมัน", "พลังงาน", "ก๊าซ"]),
         ("กีฬา", ["ฟุตบอล", "กีฬา", "บอล"]),
         ("ธุรกิจ", ["บริษัท", "ธุรกิจ", "ยอดขาย", "รายได้", "กำไร", "ลงทุน"]),
     ]
     for category, keywords in rules:
-        if any(keyword in text for keyword in keywords):
+        if contains_any_term(text, keywords):
             return normalize_category(category)
     return "ไทย"
 
@@ -763,7 +859,7 @@ def summarize_with_gemini(item):
             result = request_json(url, method="POST", payload=prompt)
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             parsed = json.loads(text)
-            category = normalize_category(parsed.get("category") or classify_without_ai(item))
+            category = validated_category(item, parsed.get("category") or classify_without_ai(item))
             summary_th = clean_text(parsed.get("summary_th") or parsed.get("summary"))[:600]
             title_th = clean_text(parsed.get("title_th"))[:220]
             importance_score = int(parsed.get("importance_score") or 55)
@@ -776,7 +872,7 @@ def summarize_with_gemini(item):
                 "title_th": title_th or item["title"],
                 "summary": summary_th or item.get("raw_summary") or item["title"],
                 "summary_th": summary_th or item.get("raw_summary") or item["title"],
-                "category": normalize_category(category),
+                "category": validated_category({**item, "title_th": title_th, "summary_th": summary_th}, category),
                 "importance_score": importance_score,
             }
         except Exception as exc:
@@ -818,7 +914,8 @@ def save_to_supabase(items):
             or item.get("trending_score", 0) < 65
             or is_low_quality_output(item)
             or not passes_source_gate(item)
-            or (item.get("translation_fallback") and source_quality_score(item) < 20)
+            or item.get("translation_fallback")
+            or not item.get("image_url")
         ):
             continue
         rows.append(
@@ -958,6 +1055,9 @@ def main():
         if is_low_quality_output(row) or not passes_source_gate(row):
             row["importance_score"] = min(row["importance_score"], 45)
             row["trending_score"] = min(row["trending_score"], 45)
+        if row.get("translation_fallback") or not row.get("image_url"):
+            row["importance_score"] = min(row["importance_score"], 55)
+            row["trending_score"] = min(row["trending_score"], 55)
         row["line_candidate"] = (
             row.get("trending_score", 0) >= 78
             and row.get("importance_score", 0) >= 60
