@@ -126,10 +126,15 @@ LOW_QUALITY_PATTERNS = [
     "fifa55",
     "เว็บไซต์ทางการ",
     "official website",
+    "เว็บไซต์อย่างเป็นทางการ",
     "เว็บพนัน",
     "เกมกีฬา",
     "ibd digital",
     "2 months for",
+    "subscribe",
+    "สมัครสมาชิก",
+    "เข้าถึงได้ไม่จำกัด",
+    "มีทีมนักข่าว",
     "appeared first",
     "เปิดเกมรุก",
     "ทุ่มงบการตลาด",
@@ -145,6 +150,7 @@ BAD_SOURCE_PATTERNS = [
     "fifa55",
     "equiti",
     "investors.com",
+    "skift.com",
 ]
 
 SOURCE_QUALITY = {
