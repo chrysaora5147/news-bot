@@ -151,6 +151,11 @@ POLITICS_LINE_BLOCK_TERMS = [
     "election",
     "trump",
     "putin",
+    "จับมือ",
+    "ปั้น",
+    "ลงนาม",
+    "เปิดตัว",
+    "แคมเปญ",
 ]
 
 CRIME_LINE_BLOCK_TERMS = [
@@ -485,6 +490,27 @@ def is_major_incident(item):
     return contains_any_term(text, MAJOR_INCIDENT_TERMS) and has_large_casualty_signal(text)
 
 
+def is_world_cup_story(item):
+    text = text_for_decision(item)
+    return contains_any_term(
+        text,
+        [
+            "บอลโลก",
+            "ฟุตบอลโลก",
+            "world cup",
+            "fifa",
+            "ผลบอล",
+            "พลิกล็อก",
+            "penalty",
+            "penalties",
+            "paraguay",
+            "germany",
+            "morocco",
+            "netherlands",
+        ],
+    )
+
+
 def is_line_blocked_topic(item):
     text = text_for_decision(item)
     if is_major_incident(item):
@@ -499,7 +525,9 @@ def is_line_worthy(item):
         return False
     if is_low_quality_output(item) or is_line_blocked_topic(item):
         return False
-    if item.get("category") in {"ทองคำ", "หุ้น", "เศรษฐกิจ", "คริปโต", "เทคโนโลยี", "ธุรกิจ", "กีฬา"}:
+    if item.get("category") == "กีฬา":
+        return is_world_cup_story(item)
+    if item.get("category") in {"ทองคำ", "หุ้น", "เศรษฐกิจ", "คริปโต", "เทคโนโลยี", "ธุรกิจ"}:
         return True
     return is_major_incident(item)
 
@@ -1242,7 +1270,7 @@ def push_line(items):
 
 def main():
     items = collect_news()
-    limit = max(30, env_int("MAX_ARTICLES_PER_RUN", 30))
+    limit = max(60, env_int("MAX_ARTICLES_PER_RUN", 60))
     enriched = []
     for item in items[:limit]:
         if not item.get("image_url"):
@@ -1256,9 +1284,16 @@ def main():
         if is_low_quality_output(row) or not passes_source_gate(row):
             row["importance_score"] = min(row["importance_score"], 45)
             row["trending_score"] = min(row["trending_score"], 45)
-        if (row.get("translation_fallback") and not acceptable_fallback(row)) or not row.get("image_url"):
+        if (
+            row.get("translation_fallback")
+            and not acceptable_fallback(row)
+            and not (row.get("category") == "กีฬา" and is_world_cup_story(row))
+        ) or not row.get("image_url"):
             row["importance_score"] = min(row["importance_score"], 55)
             row["trending_score"] = min(row["trending_score"], 55)
+        if row.get("category") == "กีฬา" and is_world_cup_story(row):
+            row["importance_score"] = max(row.get("importance_score", 0), 68)
+            row["trending_score"] = max(row.get("trending_score", 0), 82)
         row["line_candidate"] = (
             row.get("trending_score", 0) >= LINE_MIN_TRENDING_SCORE
             and row.get("importance_score", 0) >= LINE_MIN_IMPORTANCE_SCORE
