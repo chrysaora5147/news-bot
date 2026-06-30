@@ -118,12 +118,16 @@ LOW_QUALITY_PATTERNS = [
     "viral",
     "watch ",
     "full interview",
+    "squawk box",
+    "joins ",
     "morning bid",
     "newsletter",
     "live updates",
     "fifa55",
     "เว็บไซต์ทางการ",
     "official website",
+    "เว็บพนัน",
+    "เกมกีฬา",
     "ibd digital",
     "2 months for",
     "appeared first",
@@ -390,6 +394,15 @@ def page_og_image(url):
 def is_low_quality_story(item):
     text = f"{item.get('title', '')} {item.get('raw_summary', '')} {item.get('source', '')} {item.get('url', '')}".lower()
     return any(pattern in text for pattern in LOW_QUALITY_PATTERNS + BAD_SOURCE_PATTERNS)
+
+
+def is_low_quality_output(item):
+    text = f"{item.get('title_th', '')} {item.get('summary_th', '')} {item.get('source', '')} {item.get('url', '')}".lower()
+    return any(pattern in text for pattern in LOW_QUALITY_PATTERNS + BAD_SOURCE_PATTERNS)
+
+
+def passes_source_gate(item):
+    return source_quality_score(item) >= 16 or item.get("source_count", 1) >= 2
 
 
 def is_stale_dated_story(item):
@@ -750,7 +763,8 @@ def summarize_with_gemini(item):
             importance_score = int(parsed.get("importance_score") or 55)
             if not contains_thai(summary_th):
                 importance_score = min(importance_score, 40)
-            if is_low_quality_story({**item, "summary_th": summary_th}) or is_stale_dated_story(item):
+            output = {"title_th": title_th, "summary_th": summary_th, **item}
+            if is_low_quality_story(item) or is_low_quality_output(output) or is_stale_dated_story(item):
                 importance_score = min(importance_score, 45)
             return {
                 "title_th": title_th or item["title"],
@@ -793,7 +807,12 @@ def save_to_supabase(items):
 
     rows = []
     for item in items:
-        if item["importance_score"] < 60 or item.get("trending_score", 0) < 65:
+        if (
+            item["importance_score"] < 60
+            or item.get("trending_score", 0) < 65
+            or is_low_quality_output(item)
+            or not passes_source_gate(item)
+        ):
             continue
         rows.append(
             {
@@ -929,6 +948,9 @@ def main():
         ai = summarize_with_gemini(item)
         row = {**item, **ai}
         row["trending_score"] = final_trending_score(row)
+        if is_low_quality_output(row) or not passes_source_gate(row):
+            row["importance_score"] = min(row["importance_score"], 45)
+            row["trending_score"] = min(row["trending_score"], 45)
         row["line_candidate"] = (
             row.get("trending_score", 0) >= 78
             and row.get("importance_score", 0) >= 60
