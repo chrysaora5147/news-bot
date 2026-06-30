@@ -102,6 +102,8 @@ TRENDING_KEYWORDS = [
 ]
 
 LOW_QUALITY_PATTERNS = [
+    "topicstoday",
+    "topics today",
     "ห้องข่าว",
     "สุดสัปดาห์",
     "ดูดวง",
@@ -694,7 +696,7 @@ def classify_without_ai(item):
         ("ทองคำ", ["ทอง", "gold"]),
         ("คริปโต", ["bitcoin", "crypto", "คริปโต", "บิตคอยน์"]),
         ("การเมือง", ["รัฐบาล", "ครม", "สภา", "นายก", "เลือกตั้ง"]),
-        ("เศรษฐกิจ", ["เศรษฐกิจ", "ดอกเบี้ย", "เงินเฟ้อ", "เงินบาท", "gdp", "fed", "federal reserve", "central bank", "inflation"]),
+        ("เศรษฐกิจ", ["เศรษฐกิจ", "ดอกเบี้ย", "เงินเฟ้อ", "เงินบาท", "เงินเยน", "ค่าเงิน", "gdp", "fed", "federal reserve", "central bank", "inflation", "yen", "currency", "factory", "manufacturing"]),
         ("ต่างประเทศ", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global", "iran", "trump", "china", "russia", "war"]),
         ("เทคโนโลยี", ["ai", "เทคโนโลยี", "ชิป", "semiconductor"]),
         ("พลังงาน", ["น้ำมัน", "พลังงาน", "ก๊าซ"]),
