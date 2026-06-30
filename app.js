@@ -2,6 +2,7 @@ const categories = [
   "ทั้งหมด",
   "ข่าวด่วน",
   "ไทย",
+  "ต่างประเทศ",
   "เศรษฐกิจ",
   "หุ้น",
   "ทองคำ",
@@ -168,6 +169,7 @@ const fallbackNews = [
 const categoryImages = {
   ข่าวด่วน: "url('https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=1200&q=80')",
   ไทย: "url('https://images.unsplash.com/photo-1508009603885-50cf7c579365?auto=format&fit=crop&w=1200&q=80')",
+  ต่างประเทศ: "url('https://images.unsplash.com/photo-1521295121783-8a321d551ad2?auto=format&fit=crop&w=1200&q=80')",
   เศรษฐกิจ: "url('https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1200&q=80')",
   หุ้น: "url('https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=80')",
   ทองคำ: "url('https://images.unsplash.com/photo-1610375461369-d613b564c245?auto=format&fit=crop&w=1200&q=80')",

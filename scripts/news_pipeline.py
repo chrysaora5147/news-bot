@@ -60,6 +60,7 @@ DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-fla
 DEFAULT_CATEGORIES = [
     "ข่าวด่วน",
     "ไทย",
+    "ต่างประเทศ",
     "เศรษฐกิจ",
     "หุ้น",
     "ทองคำ",
@@ -710,7 +711,9 @@ def is_same_story(left, right):
 def normalize_category(category):
     if category in DEFAULT_CATEGORIES:
         return category
-    if category in {"การเมือง", "ต่างประเทศ", "ข่าวต่างประเทศ"}:
+    if category in {"ข่าวต่างประเทศ"}:
+        return "ต่างประเทศ"
+    if category in {"การเมือง"}:
         return "ไทย"
     if category in {"พลังงาน", "อสังหา"}:
         return "เศรษฐกิจ"
@@ -735,6 +738,8 @@ def validated_category(item, requested_category=None):
         return "ข่าวด่วน"
     if requested == "ไทย" and is_foreign_source(item) and contains_any_term(text, business_terms):
         return "ธุรกิจ"
+    if requested == "ไทย" and is_foreign_source(item):
+        return rule_category if rule_category != "ไทย" else "ต่างประเทศ"
     return requested if requested in DEFAULT_CATEGORIES else rule_category
 
 
@@ -1136,7 +1141,7 @@ def classify_without_ai(item):
         ("ข่าวด่วน", ["attack", "attacks", "war", "missile", "dead", "killed", "gaza", "israel", "iran", "russia", "ukraine", "earthquake", "โจมตี", "สงคราม", "เสียชีวิต", "แผ่นดินไหว"]),
         ("ไทย", ["รัฐบาล", "ครม", "สภา", "นายก", "เลือกตั้ง"]),
         ("เศรษฐกิจ", ["เศรษฐกิจ", "ดอกเบี้ย", "เงินเฟ้อ", "เงินบาท", "เงินเยน", "ค่าเงิน", "gdp", "fed", "federal reserve", "central bank", "inflation", "yen", "currency", "factory", "manufacturing", "tariff", "trade"]),
-        ("ไทย", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global", "trump", "china"]),
+        ("ต่างประเทศ", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global", "trump", "china", "usa", "us ", "europe", "russia", "ukraine", "japan", "korea", "asean"]),
         ("เทคโนโลยี", ["ai", "เทคโนโลยี", "ชิป", "semiconductor"]),
         ("เศรษฐกิจ", ["น้ำมัน", "พลังงาน", "ก๊าซ"]),
         ("กีฬา", ["ฟุตบอล", "กีฬา", "บอล", "บอลโลก", "ฟุตบอลโลก", "world cup", "fifa", "penalty", "penalties", "ผลบอล", "พลิกล็อก", "paraguay", "germany", "morocco", "netherlands"]),
