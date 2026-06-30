@@ -34,14 +34,6 @@ DEFAULT_RSS_FEEDS = [
 ]
 
 DEFAULT_QUERIES = [
-    "breaking global news today economy markets geopolitics",
-    "Thailand economy politics markets today",
-    "Asia markets China Japan Thailand economy today",
-    "Federal Reserve inflation oil gold markets today",
-    "AI semiconductor technology regulation earnings today",
-    "war geopolitics trade tariffs global economy today",
-    "SET Thailand stocks baht economy today",
-    "gold oil crypto market news today",
 ]
 
 DEFAULT_SUPABASE_URL = "https://zaqvrwsooxdtkepaaunk.supabase.co"
@@ -551,7 +543,8 @@ def final_trending_score(item):
     except Exception:
         freshness_boost = 5
     provider_boost = 4 if "+" in item.get("provider", "") else 0
-    return min(100, int(base * 0.72) + quality_boost + source_boost + keyword_boost + freshness_boost + provider_boost)
+    translated_penalty = -8 if item.get("translation_fallback") else 0
+    return min(92, int(base * 0.72) + quality_boost + source_boost + keyword_boost + freshness_boost + provider_boost + translated_penalty)
 
 
 def fallback_importance_score(item, translated=False):
@@ -598,6 +591,7 @@ def translated_fallback(item):
         "summary_th": summary_th or summary_source,
         "category": classify_without_ai(item),
         "importance_score": fallback_importance_score(item, translated=translated),
+        "translation_fallback": True,
     }
 
 
@@ -793,9 +787,9 @@ def collect_news():
         time.sleep(0.2)
 
     for query in env_list("NEWS_SEARCH_QUERIES", DEFAULT_QUERIES):
-        items.extend(google_news_rss_search(query))
-        items.extend(tavily_search(query))
-        items.extend(serpapi_search(query))
+        if os.getenv("ENABLE_SEARCH_PROVIDERS", "false").lower() == "true":
+            items.extend(tavily_search(query))
+            items.extend(serpapi_search(query))
         time.sleep(0.2)
 
     deduped = {}
@@ -818,6 +812,7 @@ def save_to_supabase(items):
             or item.get("trending_score", 0) < 65
             or is_low_quality_output(item)
             or not passes_source_gate(item)
+            or (item.get("translation_fallback") and source_quality_score(item) < 20)
         ):
             continue
         rows.append(
