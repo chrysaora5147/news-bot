@@ -1303,22 +1303,26 @@ def save_to_supabase(items):
     print(f"supabase_saved rows={len(rows)}")
 
 
-def get_line_sent_ids(items):
+def line_requires_approval():
+    return os.getenv("LINE_REQUIRE_APPROVAL", "true").lower() != "false"
+
+
+def get_line_review_states(items):
     supabase_url = normalize_supabase_url(os.getenv("SUPABASE_URL", ""))
     service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     ids = [item["id"] for item in items if item.get("id")]
     if not supabase_url or not service_key or not ids:
-        return set()
+        return {}
 
     safe_ids = ",".join(ids[:50])
-    endpoint = f"{supabase_url}/rest/v1/articles?select=id,line_sent_at&id=in.({safe_ids})"
+    endpoint = f"{supabase_url}/rest/v1/articles?select=id,line_sent_at,line_approved_at,line_rejected_at&id=in.({safe_ids})"
     headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
     try:
         rows = request_json(endpoint, headers=headers)
     except Exception as exc:
-        print(f"line_sent_lookup_failed error={exc}", file=sys.stderr)
-        return set()
-    return {row["id"] for row in rows if row.get("line_sent_at")}
+        print(f"line_review_lookup_failed error={exc}", file=sys.stderr)
+        return {}
+    return {row["id"]: row for row in rows}
 
 
 def mark_line_sent(items):
@@ -1344,12 +1348,16 @@ def mark_line_sent(items):
 
 
 def line_message(items):
-    sent_ids = get_line_sent_ids(items)
+    review_states = get_line_review_states(items)
+    require_approval = line_requires_approval()
     top_items = sorted(
         [
             item
             for item in items
-            if item.get("line_candidate") and item.get("id") not in sent_ids
+            if item.get("line_candidate")
+            and not review_states.get(item.get("id"), {}).get("line_sent_at")
+            and not review_states.get(item.get("id"), {}).get("line_rejected_at")
+            and (not require_approval or review_states.get(item.get("id"), {}).get("line_approved_at"))
         ],
         key=lambda row: (row.get("trending_score", 0), row.get("importance_score", 0), row.get("source_count", 1)),
         reverse=True,

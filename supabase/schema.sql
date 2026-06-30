@@ -15,6 +15,9 @@ create table if not exists public.articles (
   source_urls jsonb not null default '[]'::jsonb,
   trending_score integer not null default 50,
   line_candidate boolean not null default false,
+  line_approved_at timestamptz,
+  line_rejected_at timestamptz,
+  line_review_note text,
   line_sent_at timestamptz,
   importance_score integer not null default 50,
   published_at timestamptz not null,
@@ -33,6 +36,9 @@ create index if not exists articles_trending_score_idx
 
 create index if not exists articles_line_candidate_idx
   on public.articles (line_candidate, line_sent_at);
+
+create index if not exists articles_line_review_idx
+  on public.articles (line_candidate, line_approved_at, line_rejected_at, line_sent_at);
 
 alter table public.articles enable row level security;
 

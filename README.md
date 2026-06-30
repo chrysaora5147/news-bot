@@ -13,12 +13,13 @@
 - รองรับ RSS, Tavily, SerpAPI, Gemini, Supabase และ LINE Messaging API
 - แปลหัวข้อและสรุปข่าวเป็นภาษาไทยก่อนแสดงบนเว็บและส่ง LINE
 - รวมข่าวซ้ำเป็น story เดียว พร้อมนับจำนวนแหล่งข่าวและคะแนนความดัง
-- หน้า admin preview ที่ `admin.html` สำหรับดูข่าวที่จะส่ง LINE ก่อนเปิดส่งจริง
+- หน้า admin ที่ `admin.html` สำหรับ approve/reject ข่าวและส่ง LINE เฉพาะข่าวที่ผ่านแล้ว
 
 ## Categories
 
 - ข่าวด่วน
 - ไทย
+- ต่างประเทศ
 - เศรษฐกิจ
 - หุ้น
 - ทองคำ
@@ -45,10 +46,18 @@
    - `SERPAPI_API_KEY` ถ้าใช้ SerpAPI
    - `LINE_CHANNEL_ACCESS_TOKEN` ถ้าจะส่ง LINE
    - `LINE_TO_IDS` ถ้าจะส่ง LINE หลายคนให้คั่นด้วย comma
-4. ไปที่ Actions > News Pipeline > Run workflow เพื่อทดสอบ
-5. ตั้ง `SEND_LINE_DIGEST=true` ใน GitHub Variables เมื่อต้องการให้ schedule ส่ง LINE อัตโนมัติ
+4. ตั้ง Vercel Environment Variables:
+   - `ADMIN_TOKEN` token ส่วนตัวสำหรับหน้า admin
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `LINE_CHANNEL_ACCESS_TOKEN`
+   - `LINE_TO_IDS`
+5. ไปที่ Actions > News Pipeline > Run workflow เพื่อทดสอบ
+6. เข้า `/admin.html`, ใส่ `ADMIN_TOKEN`, กด approve ข่าวที่ต้องการ แล้วกดส่ง LINE
+7. ตั้ง `SEND_LINE_DIGEST=true` ใน GitHub Variables เมื่อต้องการให้ schedule ส่ง LINE อัตโนมัติ
 
-ค่าเริ่มต้นของ pipeline จะประมวลผล `10` story ต่อรอบ เพื่อลดโอกาสชน rate limit ของ Gemini free tier และเว็บจะแสดงเฉพาะข่าวที่มี `importance_score >= 60` และ `trending_score >= 65`
+ค่าเริ่มต้นของ pipeline จะไม่ส่ง LINE จากข่าวที่ระบบเสนอทันที ต้องมี `line_approved_at` ก่อน ถ้าต้องการกลับไปส่งอัตโนมัติจากระบบคัดเองให้ตั้ง `LINE_REQUIRE_APPROVAL=false`
+ค่าเริ่มต้นของ pipeline จะประมวลผลอย่างน้อย `60` story ต่อรอบ และเว็บจะแสดงเฉพาะข่าวที่ผ่านคะแนนขั้นต่ำ
 GitHub Actions ตั้งเวลาไว้ที่ 07:00, 12:00 และ 18:00 ตามเวลาไทย
 
 ## Architecture
@@ -63,6 +72,7 @@ GitHub Actions
 
 Vercel
   -> host static website
+  -> admin approve/reject/send API
   -> read articles from Supabase with anon key
 ```
 
@@ -70,8 +80,7 @@ Vercel
 
 ขั้นต่อไปที่เหมาะกับโปรเจกต์นี้:
 
-1. ใส่ API keys และ Supabase project จริง
-2. เพิ่ม RSS feeds ของสำนักข่าวไทยที่ต้องการ
-3. ทำระบบ LINE webhook เพื่อเก็บ userId จากคนที่ add bot
-4. เพิ่ม story deduplication ขั้นสูง
-5. เพิ่ม API ให้เว็บจัดพอร์ตหรือระบบอื่นดึงข่าวไปใช้ต่อ
+1. ปรับหมวดไทยให้ลดข่าวรัฐ/งบประมาณที่ไม่สำคัญ
+2. ทำระบบ LINE webhook เพื่อเก็บ userId จากคนที่ add bot
+3. เพิ่ม story deduplication ขั้นสูง
+4. เพิ่ม API ให้เว็บจัดพอร์ตหรือระบบอื่นดึงข่าวไปใช้ต่อ

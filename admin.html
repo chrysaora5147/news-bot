@@ -11,13 +11,22 @@
     <header class="site-header admin-header">
       <div>
         <p class="date">LINE Digest Preview</p>
-        <h1>ข่าวที่จะส่ง LINE</h1>
-        <p class="subtitle">ดูข่าวตัวเต็งก่อนเปิดส่งจริง ระบบจะเลือกไม่เกิน 3 ข่าวที่ยังไม่เคยส่ง</p>
+        <h1>ตรวจข่าวก่อนส่ง LINE</h1>
+        <p class="subtitle">Approve เฉพาะข่าวที่โอเค แล้วค่อยกดส่งจริง ระบบจะส่งไม่เกิน 3 ข่าวที่ยังไม่เคยส่ง</p>
       </div>
       <a class="header-link" href="./index.html">กลับหน้าเว็บ</a>
     </header>
 
     <main>
+      <section class="admin-toolbar">
+        <label>
+          Admin token
+          <input id="adminToken" type="password" autocomplete="off" placeholder="ใส่ token สำหรับแก้/ส่ง LINE" />
+        </label>
+        <button id="saveTokenButton" type="button">บันทึก token</button>
+        <button id="sendLineButton" type="button">ส่ง LINE ที่ approve แล้ว</button>
+        <span id="adminMessage"></span>
+      </section>
       <section class="admin-summary" id="adminSummary"></section>
       <section class="admin-list" id="adminList"></section>
     </main>
