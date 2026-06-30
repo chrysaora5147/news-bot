@@ -42,21 +42,13 @@ DEFAULT_GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-fla
 DEFAULT_CATEGORIES = [
     "ข่าวด่วน",
     "ไทย",
-    "การเมือง",
     "เศรษฐกิจ",
     "หุ้น",
-    "ต่างประเทศ",
     "ทองคำ",
     "คริปโต",
     "เทคโนโลยี",
     "ธุรกิจ",
-    "อสังหา",
-    "พลังงาน",
     "กีฬา",
-    "บันเทิง",
-    "สุขภาพ",
-    "ท่องเที่ยว",
-    "สิ่งแวดล้อม",
 ]
 
 TRENDING_KEYWORDS = [
@@ -311,6 +303,9 @@ def normalize_story_text(value):
     value = clean_text(value).lower()
     value = re.sub(r"https?://\S+", " ", value)
     value = re.sub(r"[-|:–—].*$", " ", value)
+    value = re.sub(r"\b(reuters|bbc|cnbc|ft|scmp|al jazeera|channel news asia|bangkok post)\b", " ", value)
+    value = re.sub(r"\b(today|latest|breaking|live|update|analysis)\b", " ", value)
+    value = re.sub(r"\b(วันนี้|ล่าสุด|ด่วน|สด|วิเคราะห์|อัปเดต|อัพเดต)\b", " ", value)
     value = re.sub(r"[^\w\u0e00-\u0e7f]+", " ", value)
     value = re.sub(r"\s+", " ", value).strip()
     return value
@@ -329,6 +324,18 @@ def story_similarity(left, right):
     if left_tokens and right_tokens:
         token_score = len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
     return max(sequence_score, token_score)
+
+
+def normalize_category(category):
+    if category in DEFAULT_CATEGORIES:
+        return category
+    if category in {"การเมือง", "ต่างประเทศ", "ข่าวต่างประเทศ"}:
+        return "ไทย"
+    if category in {"พลังงาน", "อสังหา"}:
+        return "เศรษฐกิจ"
+    if category in {"บันเทิง", "สุขภาพ", "ท่องเที่ยว", "สิ่งแวดล้อม"}:
+        return "ไทย"
+    return "ไทย"
 
 
 def source_key(item):
@@ -469,7 +476,7 @@ def cluster_news(items):
     for item in sorted_items:
         matched = None
         for cluster in clusters:
-            if story_similarity(item["title"], cluster["title"]) >= 0.62:
+            if story_similarity(item["title"], cluster["title"]) >= 0.48:
                 matched = cluster
                 break
         if matched:
@@ -695,21 +702,18 @@ def classify_without_ai(item):
         ("หุ้น", ["หุ้น", "set", "ตลาดหลักทรัพย์", "ดัชนี"]),
         ("ทองคำ", ["ทอง", "gold"]),
         ("คริปโต", ["bitcoin", "crypto", "คริปโต", "บิตคอยน์"]),
-        ("การเมือง", ["รัฐบาล", "ครม", "สภา", "นายก", "เลือกตั้ง"]),
+        ("ไทย", ["รัฐบาล", "ครม", "สภา", "นายก", "เลือกตั้ง"]),
         ("เศรษฐกิจ", ["เศรษฐกิจ", "ดอกเบี้ย", "เงินเฟ้อ", "เงินบาท", "เงินเยน", "ค่าเงิน", "gdp", "fed", "federal reserve", "central bank", "inflation", "yen", "currency", "factory", "manufacturing"]),
-        ("ต่างประเทศ", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global", "iran", "trump", "china", "russia", "war"]),
+        ("ไทย", ["สหรัฐ", "จีน", "ยุโรป", "ต่างประเทศ", "global", "iran", "trump", "china", "russia", "war"]),
         ("เทคโนโลยี", ["ai", "เทคโนโลยี", "ชิป", "semiconductor"]),
-        ("พลังงาน", ["น้ำมัน", "พลังงาน", "ก๊าซ"]),
+        ("เศรษฐกิจ", ["น้ำมัน", "พลังงาน", "ก๊าซ"]),
         ("กีฬา", ["ฟุตบอล", "กีฬา", "บอล"]),
-        ("บันเทิง", ["บันเทิง", "คอนเสิร์ต", "ละคร"]),
-        ("สุขภาพ", ["สุขภาพ", "โรงพยาบาล", "โรค"]),
-        ("ท่องเที่ยว", ["ท่องเที่ยว", "โรงแรม", "นักท่องเที่ยว"]),
-        ("สิ่งแวดล้อม", ["ฝุ่น", "อากาศ", "สิ่งแวดล้อม", "pm2.5"]),
+        ("ธุรกิจ", ["บริษัท", "ธุรกิจ", "ยอดขาย", "รายได้", "กำไร", "ลงทุน"]),
     ]
     for category, keywords in rules:
         if any(keyword in text for keyword in keywords):
-            return category
-    return "ต่างประเทศ" if is_foreign_source(item) else "ไทย"
+            return normalize_category(category)
+    return "ไทย"
 
 
 def gemini_models():
@@ -759,7 +763,7 @@ def summarize_with_gemini(item):
             result = request_json(url, method="POST", payload=prompt)
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             parsed = json.loads(text)
-            category = parsed.get("category") if parsed.get("category") in DEFAULT_CATEGORIES else classify_without_ai(item)
+            category = normalize_category(parsed.get("category") or classify_without_ai(item))
             summary_th = clean_text(parsed.get("summary_th") or parsed.get("summary"))[:600]
             title_th = clean_text(parsed.get("title_th"))[:220]
             importance_score = int(parsed.get("importance_score") or 55)
@@ -772,7 +776,7 @@ def summarize_with_gemini(item):
                 "title_th": title_th or item["title"],
                 "summary": summary_th or item.get("raw_summary") or item["title"],
                 "summary_th": summary_th or item.get("raw_summary") or item["title"],
-                "category": category,
+                "category": normalize_category(category),
                 "importance_score": importance_score,
             }
         except Exception as exc:
