@@ -325,6 +325,28 @@ LOW_VALUE_LINE_TERMS = [
     "event",
 ]
 
+SPORTS_LOW_VALUE_TERMS = [
+    "leaks about",
+    "twisted",
+    "manager said",
+    "hopes",
+    "can get",
+    "approach world cup knockouts",
+    "plenty unknowns",
+    "in tears",
+    "having a great world cup",
+    "player hugs mother",
+    "celebrations and bottle",
+    "bottle-throwing",
+    "แฟนบอล",
+    "ผู้จัดการทีม",
+    "บิดเบี้ยว",
+    "หลั่งน้ำตา",
+    "กอดแม่",
+    "ทำผลงานยอดเยี่ยม",
+    "เข้าใกล้รอบน็อกเอาต์",
+]
+
 WORLD_CUP_RESULT_TERMS = [
     "ผลบอล",
     "ผลการแข่งขัน",
@@ -515,6 +537,14 @@ def clean_fallback_summary(value, title=""):
     return summary or clean_fallback_title(title)
 
 
+def clean_ai_title(value):
+    value = clean_text(value)
+    value = re.sub(r"ด้วยปากกา", "ด้วยจุดโทษ", value)
+    value = re.sub(r"บนปากกา", "ด้วยจุดโทษ", value)
+    value = re.sub(r"\bWC\b", "ฟุตบอลโลก", value)
+    return value
+
+
 def contains_thai(value):
     return any("\u0e00" <= char <= "\u0e7f" for char in value or "")
 
@@ -587,6 +617,10 @@ def is_low_value_line_story(item):
     return False
 
 
+def is_low_value_sports_story(item):
+    return item.get("category") == "กีฬา" and contains_any_term(text_for_decision(item), SPORTS_LOW_VALUE_TERMS)
+
+
 def is_line_blocked_topic(item):
     text = text_for_decision(item)
     if is_major_incident(item):
@@ -599,7 +633,13 @@ def is_line_worthy(item):
         return False
     if not contains_thai(item.get("summary_th", "")):
         return False
-    if is_low_quality_story(item) or is_low_quality_output(item) or is_line_blocked_topic(item) or is_low_value_line_story(item):
+    if (
+        is_low_quality_story(item)
+        or is_low_quality_output(item)
+        or is_line_blocked_topic(item)
+        or is_low_value_line_story(item)
+        or is_low_value_sports_story(item)
+    ):
         return False
     if item.get("category") == "กีฬา":
         return is_world_cup_result_story(item)
@@ -981,7 +1021,7 @@ def translate_text_th(value):
 
 
 def translated_fallback(item):
-    title_th = translate_text_th(clean_fallback_title(item["title"]))
+    title_th = clean_ai_title(translate_text_th(clean_fallback_title(item["title"])))
     summary_source = clean_fallback_summary(item.get("raw_summary"), item["title"])
     summary_th = translate_text_th(summary_source)
     translated = contains_thai(title_th) and contains_thai(summary_th)
@@ -1159,7 +1199,7 @@ def summarize_with_gemini(item):
             parsed = json.loads(text)
             category = validated_category(item, parsed.get("category") or classify_without_ai(item))
             summary_th = clean_text(parsed.get("summary_th") or parsed.get("summary"))[:600]
-            title_th = clean_text(parsed.get("title_th"))[:220]
+            title_th = clean_ai_title(parsed.get("title_th"))[:220]
             importance_score = int(parsed.get("importance_score") or 55)
             if not contains_thai(summary_th):
                 importance_score = min(importance_score, 40)
@@ -1368,13 +1408,19 @@ def main():
         ) or not row.get("image_url"):
             row["importance_score"] = min(row["importance_score"], 55)
             row["trending_score"] = min(row["trending_score"], 55)
-        if row.get("category") == "กีฬา" and is_world_cup_result_story(row) and not is_low_quality_story(row) and not is_low_quality_output(row):
+        if (
+            row.get("category") == "กีฬา"
+            and is_world_cup_result_story(row)
+            and not is_low_quality_story(row)
+            and not is_low_quality_output(row)
+            and not is_low_value_sports_story(row)
+        ):
             row["importance_score"] = max(row.get("importance_score", 0), 68)
             row["trending_score"] = max(row.get("trending_score", 0), 82)
         elif row.get("category") == "กีฬา":
             row["importance_score"] = min(row["importance_score"], 55)
             row["trending_score"] = min(row["trending_score"], 55)
-        if is_low_quality_story(row) or is_low_quality_output(row):
+        if is_low_quality_story(row) or is_low_quality_output(row) or is_low_value_sports_story(row):
             row["importance_score"] = min(row["importance_score"], 45)
             row["trending_score"] = min(row["trending_score"], 45)
         row["line_candidate"] = (
