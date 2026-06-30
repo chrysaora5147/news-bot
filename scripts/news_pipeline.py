@@ -31,6 +31,10 @@ DEFAULT_RSS_FEEDS = [
     "https://www.prachachat.net/feed",
     "https://thestandard.co/feed/",
     "https://www.infoquest.co.th/feed",
+    "https://www.matichon.co.th/feed",
+    "https://www.khaosod.co.th/feed",
+    "https://www.thairath.co.th/rss/news",
+    "https://www.kaohoon.com/feed",
 ]
 
 DEFAULT_QUERIES = [
@@ -199,6 +203,7 @@ SOURCE_QUALITY = {
     "matichon.co.th": 15,
     "khaosod.co.th": 14,
     "thairath.co.th": 13,
+    "kaohoon.com": 16,
     "nationthailand.com": 13,
     "thaipost.net": 12,
     "naewna.com": 11,
@@ -902,7 +907,9 @@ def summarize_with_gemini(item):
 
 def collect_news():
     items = []
-    for feed in env_list("RSS_FEEDS", DEFAULT_RSS_FEEDS):
+    configured_feeds = env_list("RSS_FEEDS", [])
+    feeds = DEFAULT_RSS_FEEDS + [feed for feed in configured_feeds if feed not in DEFAULT_RSS_FEEDS]
+    for feed in feeds:
         items.extend(extract_rss_items(feed))
         time.sleep(0.2)
 
