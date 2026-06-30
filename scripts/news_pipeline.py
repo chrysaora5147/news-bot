@@ -530,6 +530,10 @@ def passes_source_gate(item):
     return source_quality_score(item) >= 16 or item.get("source_count", 1) >= 2
 
 
+def passes_web_source_gate(item):
+    return source_quality_score(item) >= 12 or item.get("source_count", 1) >= 2
+
+
 def acceptable_fallback(item):
     original_text = f"{item.get('title', '')} {item.get('raw_summary', '')}"
     return (
@@ -538,6 +542,22 @@ def acceptable_fallback(item):
         and item.get("image_url")
         and item.get("source_count", 1) >= 2
         and not is_low_quality_story(item)
+    )
+
+
+def acceptable_web_fallback(item):
+    original_text = f"{item.get('title', '')} {item.get('raw_summary', '')}"
+    output_text = f"{item.get('title_th', '')} {item.get('summary_th', '')}"
+    return (
+        item.get("translation_fallback")
+        and contains_thai(output_text)
+        and not is_low_quality_story(item)
+        and not is_low_quality_output(item)
+        and (
+            source_quality_score(item) >= 20
+            or item.get("source_count", 1) >= 2
+            or (contains_thai(original_text) and source_quality_score(item) >= 12)
+        )
     )
 
 
@@ -949,8 +969,8 @@ def save_to_supabase(items):
             item["importance_score"] < WEB_MIN_IMPORTANCE_SCORE
             or item.get("trending_score", 0) < WEB_MIN_TRENDING_SCORE
             or is_low_quality_output(item)
-            or not passes_source_gate(item)
-            or (item.get("translation_fallback") and not acceptable_fallback(item))
+            or not passes_web_source_gate(item)
+            or (item.get("translation_fallback") and not acceptable_web_fallback(item))
         ):
             continue
         rows.append(
@@ -1099,6 +1119,7 @@ def main():
         row["line_candidate"] = (
             row.get("trending_score", 0) >= LINE_MIN_TRENDING_SCORE
             and row.get("importance_score", 0) >= LINE_MIN_IMPORTANCE_SCORE
+            and not row.get("translation_fallback")
             and contains_thai(row.get("summary_th", ""))
         )
         enriched.append(row)
