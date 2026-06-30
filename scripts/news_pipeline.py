@@ -1070,6 +1070,9 @@ def main():
         ai = summarize_with_gemini(item)
         row = {**item, **ai}
         row["trending_score"] = final_trending_score(row)
+        if acceptable_fallback(row):
+            row["importance_score"] = max(row.get("importance_score", 0), 62)
+            row["trending_score"] = max(row.get("trending_score", 0), 70)
         if is_low_quality_output(row) or not passes_source_gate(row):
             row["importance_score"] = min(row["importance_score"], 45)
             row["trending_score"] = min(row["trending_score"], 45)
