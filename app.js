@@ -10,6 +10,7 @@ const categories = [
   "ธุรกิจ",
   "กีฬา",
 ];
+const visibleCategories = new Set(categories);
 
 const fallbackNews = [
   {
@@ -204,7 +205,7 @@ async function loadSupabaseNews() {
     return fallbackNews;
   }
 
-  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,title_th,summary,summary_th,category,source,source_count,url,image_url,importance_score,trending_score,published_at&importance_score=gte.60&trending_score=gte.65&order=trending_score.desc&order=importance_score.desc&order=published_at.desc&limit=60`;
+  const endpoint = `${config.supabaseUrl.replace(/\/$/, "")}/rest/v1/articles?select=id,title,title_th,summary,summary_th,category,source,source_count,url,image_url,importance_score,trending_score,published_at&importance_score=gte.45&trending_score=gte.45&order=trending_score.desc&order=importance_score.desc&order=published_at.desc&limit=60`;
   const response = await fetch(endpoint, {
     headers: {
       apikey: config.supabaseAnonKey,
@@ -217,7 +218,7 @@ async function loadSupabaseNews() {
   }
 
   const rows = await response.json();
-  return rows.map((row, index) => ({
+  return rows.filter((row) => visibleCategories.has(row.category)).map((row, index) => ({
     title: row.title_th || row.title,
     category: row.category,
     time: new Date(row.published_at).toLocaleTimeString("th-TH", {
@@ -344,11 +345,11 @@ document.querySelector("#dateLabel").textContent = new Date().toLocaleDateString
 
 loadSupabaseNews()
   .then((items) => {
-    news = items.length ? items : fallbackNews;
+    news = items.length ? items : fallbackNews.filter((item) => visibleCategories.has(item.category));
     render();
   })
   .catch((error) => {
     console.warn(error);
-    news = fallbackNews;
+    news = fallbackNews.filter((item) => visibleCategories.has(item.category));
     render();
   });

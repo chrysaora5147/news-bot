@@ -55,6 +55,11 @@ DEFAULT_CATEGORIES = [
     "กีฬา",
 ]
 
+WEB_MIN_IMPORTANCE_SCORE = 45
+WEB_MIN_TRENDING_SCORE = 45
+LINE_MIN_IMPORTANCE_SCORE = 60
+LINE_MIN_TRENDING_SCORE = 78
+
 TRENDING_KEYWORDS = [
     "ด่วน",
     "ล่าสุด",
@@ -941,12 +946,11 @@ def save_to_supabase(items):
     rows = []
     for item in items:
         if (
-            item["importance_score"] < 60
-            or item.get("trending_score", 0) < 65
+            item["importance_score"] < WEB_MIN_IMPORTANCE_SCORE
+            or item.get("trending_score", 0) < WEB_MIN_TRENDING_SCORE
             or is_low_quality_output(item)
             or not passes_source_gate(item)
             or (item.get("translation_fallback") and not acceptable_fallback(item))
-            or not item.get("image_url")
         ):
             continue
         rows.append(
@@ -1075,7 +1079,7 @@ def push_line(items):
 
 def main():
     items = collect_news()
-    limit = env_int("MAX_ARTICLES_PER_RUN", 30)
+    limit = max(30, env_int("MAX_ARTICLES_PER_RUN", 30))
     enriched = []
     for item in items[:limit]:
         if not item.get("image_url"):
@@ -1093,8 +1097,8 @@ def main():
             row["importance_score"] = min(row["importance_score"], 55)
             row["trending_score"] = min(row["trending_score"], 55)
         row["line_candidate"] = (
-            row.get("trending_score", 0) >= 78
-            and row.get("importance_score", 0) >= 60
+            row.get("trending_score", 0) >= LINE_MIN_TRENDING_SCORE
+            and row.get("importance_score", 0) >= LINE_MIN_IMPORTANCE_SCORE
             and contains_thai(row.get("summary_th", ""))
         )
         enriched.append(row)
