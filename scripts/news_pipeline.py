@@ -1307,6 +1307,10 @@ def line_requires_approval():
     return os.getenv("LINE_REQUIRE_APPROVAL", "true").lower() != "false"
 
 
+def line_broadcast_enabled():
+    return os.getenv("LINE_BROADCAST", "false").lower() == "true"
+
+
 def get_line_review_states(items):
     supabase_url = normalize_supabase_url(os.getenv("SUPABASE_URL", ""))
     service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -1381,7 +1385,8 @@ def line_message(items):
 def push_line(items):
     token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
     to_ids = env_list("LINE_TO_IDS", [])
-    if not token or not to_ids:
+    broadcast = line_broadcast_enabled()
+    if not token or (not broadcast and not to_ids):
         print("line_skipped missing LINE_CHANNEL_ACCESS_TOKEN or LINE_TO_IDS")
         return
 
@@ -1391,10 +1396,19 @@ def push_line(items):
         return
 
     headers = {"Authorization": f"Bearer {token}"}
-    for to_id in to_ids:
-        payload = {"to": to_id, "messages": [{"type": "text", "text": text[:4900]}]}
-        request_json("https://api.line.me/v2/bot/message/push", method="POST", payload=payload, headers=headers)
-        print(f"line_sent to={to_id}")
+    payload = {"messages": [{"type": "text", "text": text[:4900]}]}
+    if broadcast:
+        request_json("https://api.line.me/v2/bot/message/broadcast", method="POST", payload=payload, headers=headers)
+        print("line_broadcast_sent")
+    else:
+        for to_id in to_ids:
+            request_json(
+                "https://api.line.me/v2/bot/message/push",
+                method="POST",
+                payload={**payload, "to": to_id},
+                headers=headers,
+            )
+            print(f"line_sent to={to_id}")
     mark_line_sent(sent_items)
 
 

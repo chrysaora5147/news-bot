@@ -125,7 +125,52 @@ function renderRows(rows) {
   });
 }
 
+function renderHealth(payload) {
+  const env = payload.env || {};
+  const missing = Object.entries(env)
+    .filter(([key, value]) => !value && key !== "LINE_TO_IDS")
+    .map(([key]) => key);
+  const lineMode = env.LINE_BROADCAST ? "Broadcast ทุกคนที่แอดบอท" : "Push ตาม LINE_TO_IDS";
+  const approvalMode = env.LINE_REQUIRE_APPROVAL ? "ต้อง Approve ก่อนส่ง" : "ส่งอัตโนมัติจากระบบคัด";
+  document.querySelector("#adminHealth").innerHTML = `
+    <div>
+      <strong>LINE:</strong> ${escapeHtml(lineMode)}
+    </div>
+    <div>
+      <strong>โหมดส่ง:</strong> ${escapeHtml(approvalMode)}
+    </div>
+    <div>
+      <strong>Supabase:</strong> ${payload.supabase?.ok ? "พร้อม" : escapeHtml(payload.supabase?.error || "ยังไม่พร้อม")}
+    </div>
+    ${
+      missing.length
+        ? `<div class="health-error"><strong>ขาด env:</strong> ${missing.map(escapeHtml).join(", ")}</div>`
+        : ""
+    }
+  `;
+}
+
+async function loadHealth() {
+  if (!adminToken()) {
+    document.querySelector("#adminHealth").innerHTML = `<div>ใส่ token แล้วกดบันทึก เพื่อเช็กสถานะระบบส่ง LINE</div>`;
+    return;
+  }
+
+  const response = await fetch("/api/admin-health", {
+    headers: {
+      "x-admin-token": adminToken(),
+    },
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    document.querySelector("#adminHealth").innerHTML = `<div class="health-error">${escapeHtml(payload.error || "เช็กสถานะไม่สำเร็จ")}</div>`;
+    return;
+  }
+  renderHealth(payload);
+}
+
 async function refresh() {
+  await loadHealth();
   currentRows = await loadAdminStories();
   renderSummary(currentRows);
   renderRows(currentRows);
@@ -183,6 +228,7 @@ document.querySelector("#adminToken").value = adminToken();
 document.querySelector("#saveTokenButton").addEventListener("click", () => {
   localStorage.setItem("newsAdminToken", document.querySelector("#adminToken").value.trim());
   setMessage("บันทึก token แล้ว", "success");
+  refresh().catch((error) => setMessage(error.message, "error"));
 });
 document.querySelector("#sendLineButton").addEventListener("click", sendApprovedLine);
 

@@ -51,12 +51,15 @@
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `LINE_CHANNEL_ACCESS_TOKEN`
-   - `LINE_TO_IDS`
+   - `LINE_TO_IDS` ถ้าใช้ push รายคน
+   - `LINE_BROADCAST=true` ถ้าต้องการส่งให้ทุกคนที่แอด LINE bot โดยไม่ต้องใช้ userId
+   - `LINE_REQUIRE_APPROVAL=false` ถ้าต้องการให้ระบบส่งอัตโนมัติโดยไม่ต้อง approve ทุกวัน
 5. ไปที่ Actions > News Pipeline > Run workflow เพื่อทดสอบ
 6. เข้า `/admin.html`, ใส่ `ADMIN_TOKEN`, กด approve ข่าวที่ต้องการ แล้วกดส่ง LINE
 7. ตั้ง `SEND_LINE_DIGEST=true` ใน GitHub Variables เมื่อต้องการให้ schedule ส่ง LINE อัตโนมัติ
 
 ค่าเริ่มต้นของ pipeline จะไม่ส่ง LINE จากข่าวที่ระบบเสนอทันที ต้องมี `line_approved_at` ก่อน ถ้าต้องการกลับไปส่งอัตโนมัติจากระบบคัดเองให้ตั้ง `LINE_REQUIRE_APPROVAL=false`
+ถ้าต้องการส่งให้ทุกคนที่แอด LINE bot ให้ตั้ง `LINE_BROADCAST=true` ใน GitHub Variables และ Vercel Environment Variables
 ค่าเริ่มต้นของ pipeline จะประมวลผลอย่างน้อย `60` story ต่อรอบ และเว็บจะแสดงเฉพาะข่าวที่ผ่านคะแนนขั้นต่ำ
 GitHub Actions ตั้งเวลาไว้ที่ 07:00, 12:00 และ 18:00 ตามเวลาไทย
 

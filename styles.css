@@ -111,6 +111,26 @@ h1 {
   box-shadow: var(--shadow);
 }
 
+.admin-health {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  box-shadow: var(--shadow);
+}
+
+.admin-health strong {
+  color: var(--ink);
+}
+
+.health-error {
+  color: #b42318;
+}
+
 .admin-toolbar label {
   display: grid;
   gap: 7px;
