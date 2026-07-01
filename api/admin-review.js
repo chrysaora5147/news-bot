@@ -22,6 +22,7 @@ module.exports = async function handler(request, response) {
     let payload;
     if (action === "approve") {
       payload = {
+        line_candidate: true,
         line_approved_at: new Date().toISOString(),
         line_rejected_at: null,
         line_review_note: note || null,
