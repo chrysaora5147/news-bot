@@ -21,7 +21,11 @@ function requireAdmin(request, response) {
 }
 
 function supabaseConfig() {
-  const supabaseUrl = (process.env.SUPABASE_URL || "https://zaqvrwsooxdtkepaaunk.supabase.co").replace(/\/$/, "");
+  const rawSupabaseUrl = process.env.SUPABASE_URL || "https://zaqvrwsooxdtkepaaunk.supabase.co";
+  const supabaseUrl = rawSupabaseUrl
+    .trim()
+    .replace(/\/$/, "")
+    .replace(/\/rest\/v1\/?$/, "");
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) {
     throw new Error("missing SUPABASE_SERVICE_ROLE_KEY");
