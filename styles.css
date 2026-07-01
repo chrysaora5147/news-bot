@@ -63,6 +63,18 @@ h1 {
   font-weight: 700;
 }
 
+.header-tools {
+  width: min(480px, 100%);
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  justify-content: flex-end;
+}
+
+.header-tools .search {
+  flex: 1;
+}
+
 .search input {
   width: 100%;
   min-height: 46px;
@@ -417,6 +429,10 @@ main {
     grid-template-columns: 1fr;
   }
 
+  .header-tools {
+    justify-content: flex-start;
+  }
+
   .top-meta {
     justify-self: start;
   }
@@ -450,5 +466,9 @@ main {
 
   .news-grid {
     grid-template-columns: 1fr;
+  }
+
+  .header-tools {
+    display: grid;
   }
 }
